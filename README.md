@@ -23,14 +23,14 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
 
 </div>
-
+<!-- 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=hx63_Fr5I8g">
     <img src="https://img.youtube.com/vi/OpVqMymtw5Q/hqdefault.jpg" width="300" alt="Prototype Demo"/>
   </a>
   <br>
   <sub>Click to watch working prototype</sub>
-</p>
+</p> -->
 
 ---
 
@@ -862,12 +862,13 @@ See the full step-by-step guide in **[DEPLOY-GUIDE.md](DEPLOY-GUIDE.md)** — co
 
 ## 18. Team
 
-| Name | Role | GitHub |
-|---|---|---|
-| Sandeep Prajapati | Team Lead | [@simplysandeepp](https://github.com/simplysandeepp) |
-| Kurian Jose | Team Member | [@KurianJose7586](https://github.com/KurianJose7586) |
-| Preet Biswas | Team Member | [@preetbiswas12](https://github.com/preetbiswas12) |
-| Aryan Singh | Team Member | [@DevAryanSin](https://github.com/DevAryanSin) |
+| Name GitHub |
+|---|
+| Aryan Singh  [@DevAryanSin](https://github.com/DevAryanSin) |
+| Sandeep Prajapati [@simplysandeepp](https://github.com/simplysandeepp) |
+| Kurian Jose  [@KurianJose7586](https://github.com/KurianJose7586) |
+| Preet Biswas  [@preetbiswas12](https://github.com/preetbiswas12) |
+
 
 ---
 
