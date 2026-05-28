@@ -872,10 +872,10 @@ See the full step-by-step guide in **[DEPLOY-GUIDE.md](DEPLOY-GUIDE.md)** — co
 
 ---
 
-<div align="center">
+<!-- <div align="center">
 
 Built with love for HackFest 2.0
 
 [Live Demo](https://brd-agent-xi.vercel.app/) &middot; [Deploy Guide](DEPLOY-GUIDE.md) &middot; [Contributing](CONTRIBUTING.md)
 
-</div>
+</div> -->
