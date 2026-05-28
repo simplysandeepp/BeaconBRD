@@ -1,0 +1,85 @@
+MIT License
+
+Copyright (c) 2026 Sandeep Prajapati (GitHub: @simplysandeepp)
+
+All project content within this repository — including but not limited to
+source code, frontend UI/UX design, backend processing logic, multi-agent AI
+pipeline architecture, noise classification engine, database schema, API
+design, documentation, deployment configurations, and all associated files —
+are the original intellectual work of Sandeep Prajapati. This copyright
+applies in full regardless of whether the repository has been forked, cloned,
+mirrored, or redistributed by any individual or organization.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+1. COPYRIGHT NOTICE RETENTION
+   The above copyright notice and this permission notice shall be included
+   in all copies, forks, or substantial portions of the Software, without
+   modification or removal of any attribution text.
+
+2. ATTRIBUTION REQUIREMENT
+   Any fork, clone, derivative work, academic submission, portfolio entry,
+   or public deployment based on this Software must include a clear and
+   prominent credit to the original author:
+
+       Original Project: Beacon
+       Original Author : Sandeep Prajapati (@simplysandeepp)
+       Repository      : https://github.com/simplysandeepp/Beacon
+
+   This attribution must appear in the project README, documentation, or
+   any equivalent public-facing description of the derivative work.
+
+3. NO MISREPRESENTATION
+   The name "Beacon", the project identity, branding, and design language
+   of this Software may not be used to imply endorsement of, or to
+   misrepresent the origin of, any derivative or forked work — without
+   prior explicit written permission from Sandeep Prajapati.
+
+4. CONTRIBUTOR AGREEMENT
+   Any individual who submits contributions to this repository — including
+   pull requests, patches, bug fixes, feature additions, or documentation
+   improvements — agrees that their contributions are made under the terms
+   of this license. Original project authorship and ownership remain with
+   Sandeep Prajapati unless formally and explicitly transferred in writing.
+
+5. COMMERCIAL USE
+   Commercial use of this Software is permitted under this license, provided
+   that the above attribution requirement (Clause 2) is fulfilled and the
+   original copyright notice is preserved in all distributed copies.
+
+6. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+PROJECT INFORMATION
+
+  Project Name   : Beacon - AI-Powered Business Requirements Document Platform
+  Original Author: Sandeep Prajapati
+  GitHub Handle  : @simplysandeepp
+  Repository     : https://github.com/simplysandeepp/Beacon
+  Live Demo      : https://beacon.sandeepp.in/
+  License Type   : MIT (with Attribution Clauses)
+
+CONTRIBUTORS
+
+  The following individuals contributed to the development of Beacon under
+  the direction and leadership of Sandeep Prajapati. Their contributions
+  are acknowledged here and do not transfer or dilute original authorship.
+
+    - Kurian Jose    | GitHub: @KurianJose7586
+    - Preet Biswas   | GitHub: @preetbiswas12
+    - Aryan Singh    | GitHub: @DevAryanSin
+
+-------------------------------------------------------------------------------

@@ -1,0 +1,14 @@
+**/*.pyc
+**/__pycache__
+**/.env
+**/venv
+**/.git
+**/.gitignore
+**/node_modules
+**/aks_storage.db
+**/brd.docx
+**/pipeline_debug.log
+**/verification_output*.txt
+Dockerfile
+docker-compose.yml
+.dockerignore

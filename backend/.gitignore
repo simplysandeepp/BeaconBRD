@@ -1,0 +1,62 @@
+# Environment variables — never commit any of these
+.env
+.env.local
+.env*.local
+.env.backup
+.env.bak
+vercel.env
+
+# Databases
+*.db
+*.db.backup
+*.db.bak
+*.sqlite3
+
+# Python compilation
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environment
+env/
+venv/
+.venv/
+*.egg-info/
+
+# Distribution & Build
+dist/
+build/
+
+# Testing
+.pytest_cache/
+test_output*.txt
+test_output*.log
+
+# Build output & Logs
+demo_output.txt
+*.log
+git_pull*.txt
+git_status*.txt
+
+# Backups & Temporary Editor Files
+*.backup
+*.bak
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+start-backend.ps1.backup
+.certs/
+*.pem
+*.key
+*.pfx
+
+
+# Dataset (large files)
+emails.csv
+emails.csv/
+emails.csv
+
