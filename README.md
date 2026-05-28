@@ -6,8 +6,8 @@
 
 **Convert scattered Slack threads, emails, meeting notes, and uploaded files into structured, export-ready BRDs — automatically.**
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://beacon.sandeepp.in/)
-[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/simplysandeepp/Beacon)
+<!-- [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://beacon.sandeepp.in/) -->
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/DevAryanSin/BeaconBRD)
 [![Deploy Guide](https://img.shields.io/badge/Deploy%20Guide-Read%20Now-0A66C2?style=for-the-badge&logo=readthedocs&logoColor=white)](DEPLOY-GUIDE.md)
 [![Contributing](https://img.shields.io/badge/Contributing-Guide-6C63FF?style=for-the-badge)](CONTRIBUTING.md)
 
@@ -728,7 +728,7 @@ Beacon/
 ### 1. Clone
 
 ```bash
-git clone https://github.com/simplysandeepp/Beacon.git
+git clone https://github.com/DevAryanSin/BeaconBRD
 cd Beacon
 ```
 

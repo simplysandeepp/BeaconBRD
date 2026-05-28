@@ -461,8 +461,8 @@ function Footer() {
                     <h4 className="text-[10px] font-mono text-zinc-600 tracking-widest uppercase font-bold">Resources</h4>
                     <ul className="space-y-3 flex flex-col">
                         {[
-                            { label: 'GitHub Repo', href: 'https://github.com/simplysandeepp/Beacon' },
-                            { label: 'Contributing', href: 'https://github.com/simplysandeepp/Beacon/blob/main/CONTRIBUTING.md' },
+                            { label: 'GitHub Repo', href: 'https://github.com/DevAryanSin/BeaconBRD' },
+                            { label: 'Contributing', href: 'https://github.com/DevAryanSin/BeaconBRD/blob/main/CONTRIBUTING.md' },
                             { label: 'Privacy Policy', href: '#' },
                             { label: 'Terms of Use', href: '#' },
                             { label: 'AI Disclaimer', href: '#' },
@@ -486,7 +486,7 @@ function Footer() {
                 <div className="flex flex-col gap-4">
                     <h4 className="text-[10px] font-mono text-zinc-600 tracking-widest uppercase font-bold">Team</h4>
                     <ul className="space-y-4 flex flex-col">
-                        {/* Lead */}
+                        {/* Lead
                         <li className="flex flex-col gap-0.5">
                             <a
                                 href="https://www.sandeepp.in/"
@@ -501,10 +501,11 @@ function Footer() {
                                 <span className="text-zinc-700">·</span>
                                 <a href="https://github.com/simplysandeepp/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors inline-flex items-center gap-0.5">GitHub <ExternalLink size={8} /></a>
                             </div>
-                        </li>
+                        </li> */}
                         {/* Teammates */}
                         {[
                             { name: 'Kurian Jose', github: 'https://github.com/KurianJose7586' },
+                            { name: 'Sandeep Prajapati', github: 'https://github.com/simplysandeepp' },
                             { name: 'Aryan Singh', github: 'https://github.com/DevAryanSin' },
                             { name: 'Preet Biswas', github: 'https://github.com/preetbiswas12' },
                         ].map(({ name, github }) => (

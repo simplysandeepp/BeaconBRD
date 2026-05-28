@@ -6,7 +6,7 @@ Thank you for your interest in contributing! 🎉
 
 1. **Clone the repo**
    ```bash
-   git clone https://github.com/simplysandeepp/ps21-brd-agent.git
+   git clone https://github.com/DevAryanSin/BeaconBRD
    cd ps21-brd-agent
    ```
 
