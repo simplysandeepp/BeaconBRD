@@ -1,5 +1,5 @@
-# Use Bullseye as it is stable for your current Python version
-FROM python:3.9-slim-bullseye
+# Use Python 3.11 Bookworm for stability and up-to-date dependencies
+FROM python:3.11-slim-bookworm
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
