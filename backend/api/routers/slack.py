@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, List
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 try:
@@ -40,13 +40,8 @@ SLACK_SCOPES = ",".join(
 )
 OAUTH_STATE_TTL_SECONDS = 10 * 60
 
-_oauth_states: Dict[str, float] = {}
-_slack_auth_state: Dict[str, Any] = {
-    "access_token": None,
-    "team_id": None,
-    "team_name": None,
-    "scopes": [],
-}
+_oauth_states: Dict[str, Any] = {}
+_slack_credentials: Dict[str, Dict[str, Any]] = {}
 
 
 class SlackIngestRequest(BaseModel):
@@ -55,9 +50,19 @@ class SlackIngestRequest(BaseModel):
     limit_per_channel: int = Field(default=200, ge=1, le=1000)
 
 
+def _get_uid_from_request(request: Request) -> str:
+    uid = request.headers.get("X-User-UID")
+    if not uid:
+        uid = request.query_params.get("uid")
+    return uid or "default_user"
+
+
 def _clean_stale_states() -> None:
     now = time.time()
-    stale = [key for key, created in _oauth_states.items() if now - created > OAUTH_STATE_TTL_SECONDS]
+    stale = [
+        key for key, val in _oauth_states.items()
+        if now - (val["timestamp"] if isinstance(val, dict) else val) > OAUTH_STATE_TTL_SECONDS
+    ]
     for key in stale:
         _oauth_states.pop(key, None)
 
@@ -135,19 +140,24 @@ def _require_slack_sdk() -> None:
         )
 
 
-def _require_token() -> str:
-    token = _slack_auth_state.get("access_token")
+def _require_token(uid: str) -> str:
+    user_state = _slack_credentials.get(uid) or {}
+    token = user_state.get("access_token")
     if not token:
         raise HTTPException(status_code=401, detail="Slack is not connected. Run OAuth first.")
     return str(token)
 
 
 @router.get("/auth/start")
-def start_slack_oauth(redirect: bool = Query(default=False)):
+def start_slack_oauth(request: Request, redirect: bool = Query(default=False)):
     client_id, _, redirect_uri = _require_config()
     _clean_stale_states()
     state = secrets.token_urlsafe(24)
-    _oauth_states[state] = time.time()
+    uid = _get_uid_from_request(request)
+    _oauth_states[state] = {
+        "timestamp": time.time(),
+        "uid": uid
+    }
     auth_url = (
         "https://slack.com/oauth/v2/authorize"
         f"?client_id={client_id}"
@@ -170,7 +180,11 @@ def slack_oauth_callback(code: str = Query(default=""), state: str = Query(defau
     if state not in _oauth_states:
         return RedirectResponse(f"{frontend_profile}?slack=error&reason=invalid_state")
 
-    _oauth_states.pop(state, None)
+    state_data = _oauth_states.pop(state, None)
+    uid = "default_user"
+    if isinstance(state_data, dict):
+        uid = state_data.get("uid") or "default_user"
+
     _require_slack_sdk()
     client_id, client_secret, redirect_uri = _require_config()
     client = WebClient()
@@ -188,45 +202,40 @@ def slack_oauth_callback(code: str = Query(default=""), state: str = Query(defau
     token = response.get("access_token")
     team = response.get("team", {}) or {}
     scopes = (response.get("scope") or "").split(",")
-    _slack_auth_state.update(
-        {
-            "access_token": token,
-            "team_id": team.get("id"),
-            "team_name": team.get("name"),
-            "scopes": [scope for scope in scopes if scope],
-        }
-    )
+    _slack_credentials[uid] = {
+        "access_token": token,
+        "team_id": team.get("id"),
+        "team_name": team.get("name"),
+        "scopes": [scope for scope in scopes if scope],
+    }
     team_name = quote(str(team.get("name") or "workspace"), safe="")
     return RedirectResponse(f"{frontend_profile}?slack=connected&team={team_name}")
 
 
 @router.get("/status")
-def slack_status():
-    connected = bool(_slack_auth_state.get("access_token"))
+def slack_status(request: Request):
+    uid = _get_uid_from_request(request)
+    user_state = _slack_credentials.get(uid) or {}
+    connected = bool(user_state.get("access_token"))
     return {
         "connected": connected,
-        "team_id": _slack_auth_state.get("team_id"),
-        "team_name": _slack_auth_state.get("team_name"),
-        "scopes": _slack_auth_state.get("scopes") or [],
+        "team_id": user_state.get("team_id"),
+        "team_name": user_state.get("team_name"),
+        "scopes": user_state.get("scopes") or [],
     }
 
 
 @router.post("/disconnect")
-def slack_disconnect():
-    _slack_auth_state.update(
-        {
-            "access_token": None,
-            "team_id": None,
-            "team_name": None,
-            "scopes": [],
-        }
-    )
+def slack_disconnect(request: Request):
+    uid = _get_uid_from_request(request)
+    _slack_credentials.pop(uid, None)
     return {"message": "Slack disconnected."}
 
 
 @router.get("/channels")
-def list_slack_channels():
-    token = _require_token()
+def list_slack_channels(request: Request):
+    uid = _get_uid_from_request(request)
+    token = _require_token(uid)
     _require_slack_sdk()
     client = WebClient(token=token)
 
@@ -260,8 +269,9 @@ def list_slack_channels():
 
 
 @router.post("/ingest")
-def ingest_slack_channels(body: SlackIngestRequest):
-    token = _require_token()
+def ingest_slack_channels(body: SlackIngestRequest, request: Request):
+    uid = _get_uid_from_request(request)
+    token = _require_token(uid)
     _require_slack_sdk()
     if not body.channel_ids:
         raise HTTPException(status_code=400, detail="Select at least one Slack channel to ingest.")
