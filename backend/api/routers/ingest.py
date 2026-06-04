@@ -10,11 +10,13 @@ from typing import List
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(PROJECT_ROOT)
 sys.path.append(os.path.join(PROJECT_ROOT, "Noise filter module"))
+sys.path.append(os.path.join(PROJECT_ROOT, "integration_module"))
 
 from brd_module.storage import store_chunks
 from storage import copy_session_chunks
 from classifier import classify_chunks
 from schema import ClassifiedChunk, SignalLabel
+import pdf
 
 # Session ID of the pre-classified 300-email Enron demo cache
 DEMO_CACHE_SESSION_ID = os.environ.get("DEMO_CACHE_SESSION_ID", "default_session")
@@ -103,36 +105,176 @@ def ingest_data(session_id: str, request: IngestRequest, background_tasks: Backg
     background_tasks.add_task(_process_and_store, session_id, chunk_dicts)
     return {"message": f"Processing {len(request.chunks)} chunks in the background for session {session_id}."}
 
+def _extract_text_from_file(filename: str, file_bytes: bytes) -> str:
+    """Extract plain text from uploaded file bytes based on extension."""
+    ext = (filename.rsplit(".", 1)[-1] if "." in filename else "").lower()
+
+    if ext == "pdf":
+        return pdf.extract_text_from_pdf_bytes(file_bytes)
+
+    if ext == "docx":
+        return pdf.extract_text_from_docx_bytes(file_bytes)
+
+    if ext == "csv":
+        # Decode CSV and concatenate all cell values into one text blob
+        try:
+            text = file_bytes.decode("utf-8", errors="ignore")
+        except Exception:
+            text = file_bytes.decode("latin-1", errors="ignore")
+        reader = csv.reader(io.StringIO(text))
+        rows = []
+        for row in reader:
+            rows.append(" ".join(row))
+        return "\n".join(rows)
+
+    # Default: treat as plain text (.txt, .md, .log, etc.)
+    try:
+        return file_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return file_bytes.decode("latin-1", errors="ignore")
+
+
+def _chunk_text(text: str, filename: str, source_type: str) -> list:
+    """
+    Split text into ~1500-char chunks at paragraph/sentence boundaries.
+    Returns list of dicts in the format expected by classify_chunks().
+    """
+    chunks = []
+
+    # Split on double newlines (paragraphs), or single newlines if no doubles
+    paragraphs = re.split(r"\n\s*\n", text.strip())
+    if len(paragraphs) <= 1:
+        paragraphs = text.strip().split("\n")
+
+    current_buf = ""
+    chunk_idx = 0
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+
+        # If adding this paragraph would exceed 1500 chars, flush the buffer first
+        if current_buf and len(current_buf) + len(para) + 2 > 1500:
+            chunks.append({
+                "cleaned_text": current_buf.strip(),
+                "source_ref": f"file:{filename}:chunk{chunk_idx}",
+                "speaker": "Unknown",
+                "source_type": source_type,
+            })
+            chunk_idx += 1
+            current_buf = ""
+
+        # If a single paragraph is > 1500 chars, split on sentences
+        if len(para) > 1500:
+            if current_buf:
+                chunks.append({
+                    "cleaned_text": current_buf.strip(),
+                    "source_ref": f"file:{filename}:chunk{chunk_idx}",
+                    "speaker": "Unknown",
+                    "source_type": source_type,
+                })
+                chunk_idx += 1
+                current_buf = ""
+
+            sentences = re.split(r"(?<=[.!?])\s+", para)
+            sentence_buf = ""
+            for sent in sentences:
+                if sentence_buf and len(sentence_buf) + len(sent) + 1 > 1500:
+                    chunks.append({
+                        "cleaned_text": sentence_buf.strip(),
+                        "source_ref": f"file:{filename}:chunk{chunk_idx}",
+                        "speaker": "Unknown",
+                        "source_type": source_type,
+                    })
+                    chunk_idx += 1
+                    sentence_buf = ""
+                sentence_buf += (" " if sentence_buf else "") + sent
+
+            if sentence_buf:
+                current_buf = sentence_buf
+            continue
+
+        # Normal case: append paragraph to buffer
+        current_buf += ("\n\n" if current_buf else "") + para
+
+    # Flush remaining buffer
+    if current_buf.strip():
+        chunks.append({
+            "cleaned_text": current_buf.strip(),
+            "source_ref": f"file:{filename}:chunk{chunk_idx}",
+            "speaker": "Unknown",
+            "source_type": source_type,
+        })
+
+    return chunks
+
+
 @router.post("/upload")
 async def upload_file(
     session_id: str,
     file: UploadFile = File(...),
-    source_type: str = Form("email")
+    source_type: str = Form("file")
 ):
     """
-    DEMO MODE: Accepts and discards any uploaded file, then copies pre-classified
-    chunks from DEMO_CACHE_SESSION_ID into this session — instant DB copy.
+    Real file upload: extracts text from the uploaded file, classifies it
+    through the noise filter pipeline, and stores chunks in the session.
+    Supports .txt, .csv, .pdf, .docx.
     """
-    await file.read()  # discard — we never process the real file
     filename = file.filename or "uploaded_file"
+    file_bytes = await file.read()
 
-    try:
-        copied = copy_session_chunks(DEMO_CACHE_SESSION_ID, session_id)
-        if copied > 0:
-            return {
-                "message": f"Upload complete. {copied} chunks classified and stored.",
-                "chunk_count": copied,
-                "filename": filename,
-                "demo_mode": True,
-            }
+    # 1. Extract text
+    text = await _extract_text_from_file(filename, file_bytes)
+    if not text or len(text.strip()) < 15:
         raise HTTPException(
-            status_code=503,
-            detail="Demo cache is empty. Run the /demo endpoint first to seed it."
+            status_code=400,
+            detail=f"File '{filename}' contains no usable text (too short or empty)."
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+    # 2. Chunk the text
+    chunk_dicts = _chunk_text(text, filename, source_type)
+    if not chunk_dicts:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File '{filename}' produced no classifiable chunks."
+        )
+
+    # 3. Classify via LLM pipeline (same as Slack / Gmail)
+    api_key = _load_api_key()
+    try:
+        classified = classify_chunks(chunk_dicts, api_key=api_key)
+    except Exception:
+        # Fallback to heuristic labels when LLM is unavailable
+        classified = []
+        for raw in chunk_dicts:
+            raw_text = (raw.get("cleaned_text") or "").strip()
+            label = _fallback_label_for_text(raw_text)
+            classified.append(
+                ClassifiedChunk(
+                    session_id=session_id,
+                    source_type=raw.get("source_type", "file"),
+                    source_ref=raw.get("source_ref", f"file:{filename}"),
+                    speaker=raw.get("speaker", "Unknown"),
+                    raw_text=raw_text,
+                    cleaned_text=raw_text,
+                    label=label,
+                    confidence=0.6,
+                    reasoning="Fallback local keyword classification (LLM unavailable).",
+                    flagged_for_review=True,
+                )
+            )
+
+    # 4. Set session_id on every chunk and store
+    for c in classified:
+        c.session_id = session_id
+    store_chunks(classified)
+
+    return {
+        "message": f"Upload complete. {len(classified)} chunks classified and stored.",
+        "chunk_count": len(classified),
+        "filename": filename,
+    }
 
 
 
