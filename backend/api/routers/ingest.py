@@ -225,7 +225,7 @@ async def upload_file(
     file_bytes = await file.read()
 
     # 1. Extract text
-    text = await _extract_text_from_file(filename, file_bytes)
+    text = _extract_text_from_file(filename, file_bytes)
     if not text or len(text.strip()) < 15:
         raise HTTPException(
             status_code=400,
