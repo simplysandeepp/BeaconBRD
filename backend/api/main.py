@@ -54,14 +54,36 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Allow frontend testing
+# Allow frontend testing — must be outermost middleware to handle OPTIONS preflight
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://beacon-brd.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+# Explicit OPTIONS handler for all routes — ensures preflight never gets redirected
+@app.middleware("http")
+async def options_handler(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return JSONResponse(
+            status_code=200,
+            content={},
+            headers={
+                "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "86400",
+            },
+        )
+    return await call_next(request)
 
 app.include_router(sessions.router)
 app.include_router(ingest.router)
