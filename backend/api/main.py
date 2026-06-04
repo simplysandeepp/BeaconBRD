@@ -54,35 +54,38 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware — kept as backup, but the http middleware below handles everything
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 
 # Global CORS header injector — ensures every response (including errors) has CORS headers
 @app.middleware("http")
 async def cors_header_injector(request: Request, call_next):
     origin = request.headers.get("Origin", "")
-    # Allow the deployed frontend and local dev origins
-    allowed_origins = {
-        "https://beacon-brd.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:5173",
-    }
-    allowed_origin = origin if origin in allowed_origins else "https://beacon-brd.vercel.app"
+    
+    # Strictly allowed frontend URL
+    allowed_frontend = "https://beacon-brd.vercel.app"
+
+    # Strictly lock down communication to only the specified frontend and local development
+    if origin:
+        if origin == allowed_frontend:
+            allowed_origin = origin
+        elif origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:"):
+            allowed_origin = origin
+        else:
+            return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
+    else:
+        # Requests with no origin (like Slack webhooks or direct backend-to-backend calls)
+        # proceed, but their CORS headers will default to the allowed frontend.
+        allowed_origin = allowed_frontend
 
     if request.method == "OPTIONS":
+        requested_headers = request.headers.get("Access-Control-Request-Headers", "*")
         return JSONResponse(
             status_code=200,
             content={},
             headers={
                 "Access-Control-Allow-Origin": allowed_origin,
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Headers": requested_headers,
                 "Access-Control-Allow-Credentials": "true",
                 "Access-Control-Max-Age": "86400",
             },

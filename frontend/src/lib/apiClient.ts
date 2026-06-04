@@ -15,6 +15,7 @@ async function apiFetch<T = unknown>(path: string, options?: RequestInit): Promi
     
     const res = await fetch(joinUrl(BASE, path), {
         ...options,
+        credentials: "include",
         headers: {
             ...headers,
             ...(options?.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {})
@@ -246,6 +247,7 @@ export async function ingestDemoDataset(
 ): Promise<{ message: string; chunk_count: number; logs: string[] }> {
     const res = await fetch(joinUrl(BASE, `/sessions/${sessionId}/ingest/demo?limit=${limit}`), {
         method: "POST",
+        credentials: "include",
         headers: { Accept: "text/plain" },
     });
 
@@ -358,7 +360,7 @@ export function streamBRDGeneration(
     }
 ): () => void {
     const streamUrl = `${BASE.replace(/\/$/, "")}/sessions/${sessionId}/brd/generate/stream`;
-    const source = new EventSource(streamUrl);
+    const source = new EventSource(streamUrl, { withCredentials: true });
 
     const handleRaw = (event: MessageEvent) => {
         try {
@@ -581,7 +583,9 @@ export async function exportBRD(
     sessionId: string,
     format: ExportFormat = "markdown"
 ): Promise<void> {
-    const res = await fetch(joinUrl(BASE, `/sessions/${sessionId}/brd/export?format=${format}`));
+    const res = await fetch(joinUrl(BASE, `/sessions/${sessionId}/brd/export?format=${format}`), {
+        credentials: "include",
+    });
     if (!res.ok) {
         const errorText = await res.text().catch(() => "Export failed");
         throw new Error(`Export error ${res.status}: ${errorText}`);
