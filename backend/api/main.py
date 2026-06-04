@@ -54,36 +54,52 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Allow frontend testing — must be outermost middleware to handle OPTIONS preflight
+# CORS middleware — kept as backup, but the http middleware below handles everything
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Global CORS header injector — ensures every response (including errors) has CORS headers
+@app.middleware("http")
+async def cors_header_injector(request: Request, call_next):
+    origin = request.headers.get("Origin", "")
+    # Allow the deployed frontend and local dev origins
+    allowed_origins = {
         "https://beacon-brd.vercel.app",
         "http://localhost:3000",
         "http://localhost:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+    }
+    allowed_origin = origin if origin in allowed_origins else "https://beacon-brd.vercel.app"
 
-# Explicit OPTIONS handler for all routes — ensures preflight never gets redirected
-@app.middleware("http")
-async def options_handler(request: Request, call_next):
     if request.method == "OPTIONS":
         return JSONResponse(
             status_code=200,
             content={},
             headers={
-                "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
+                "Access-Control-Allow-Origin": allowed_origin,
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
                 "Access-Control-Allow-Headers": "*",
                 "Access-Control-Allow-Credentials": "true",
                 "Access-Control-Max-Age": "86400",
             },
         )
-    return await call_next(request)
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {str(exc)}"},
+        )
+
+    response.headers["Access-Control-Allow-Origin"] = allowed_origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Expose-Headers"] = "*"
+    return response
 
 app.include_router(sessions.router)
 app.include_router(ingest.router)
