@@ -277,6 +277,93 @@ async def upload_file(
     }
 
 
+@router.post("/upload-ocr")
+async def upload_file_ocr(
+    session_id: str,
+    file: UploadFile = File(...),
+):
+    """
+    OCR upload endpoint — accepts PDFs and images, extracts text via OCR,
+    then classifies and stores chunks into the session.
+
+    NOTE: This is a placeholder. The actual OCR integration (Tesseract, cloud
+    OCR, etc.) will be wired in later. For now, for PDFs it falls back to
+    PyMuPDF text extraction; for images it returns an error prompting the
+    user to paste text manually or wait for OCR integration.
+    """
+    filename = file.filename or "uploaded_file"
+    file_bytes = await file.read()
+    ext = (filename.rsplit(".", 1)[-1] if "." in filename else "").lower()
+
+    # For PDFs, fall back to PyMuPDF text extraction (works for text-based PDFs)
+    if ext == "pdf":
+        text = pdf.extract_text_from_pdf_bytes(file_bytes)
+        if not text or len(text.strip()) < 15:
+            raise HTTPException(
+                status_code=400,
+                detail=f"PDF '{filename}' contains no extractable text. "
+                       "Scanned PDFs require OCR which is coming soon. "
+                       "Please use a text-based PDF or paste the text directly."
+            )
+        chunk_dicts = _chunk_text(text, filename, "pdf")
+        if not chunk_dicts:
+            raise HTTPException(status_code=400, detail="No classifiable chunks produced from PDF.")
+
+        api_key = _load_api_key()
+        try:
+            classified = classify_chunks(chunk_dicts, api_key=api_key)
+        except Exception:
+            classified = _heuristic_classify_fallback(chunk_dicts, session_id, "pdf", filename)
+
+        for c in classified:
+            c.session_id = session_id
+        store_chunks(classified)
+
+        return {
+            "message": f"PDF processed. {len(classified)} chunks classified and stored.",
+            "chunk_count": len(classified),
+            "filename": filename,
+        }
+
+    # For images — OCR not yet integrated
+    image_exts = {"png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp"}
+    if ext in image_exts:
+        raise HTTPException(
+            status_code=501,
+            detail=f"OCR for image files ({ext.upper()}) is not yet integrated. "
+                   "Please paste the text from this image manually, or wait for OCR support."
+        )
+
+    # Unknown file type
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unsupported file type '.{ext}' for OCR upload. "
+               "Supported: PDF, PNG, JPG, JPEG, GIF, BMP, TIFF, WEBP."
+    )
+
+
+def _heuristic_classify_fallback(chunk_dicts: list, session_id: str, source_type: str, filename: str) -> list:
+    """Fallback heuristic classification when LLM is unavailable."""
+    classified = []
+    for raw in chunk_dicts:
+        raw_text = (raw.get("cleaned_text") or "").strip()
+        label = _fallback_label_for_text(raw_text)
+        classified.append(
+            ClassifiedChunk(
+                session_id=session_id,
+                source_type=source_type,
+                source_ref=raw.get("source_ref", f"file:{filename}"),
+                speaker=raw.get("speaker", "Unknown"),
+                raw_text=raw_text,
+                cleaned_text=raw_text,
+                label=label,
+                confidence=0.6,
+                reasoning="Fallback local keyword classification (LLM unavailable).",
+                flagged_for_review=True,
+            )
+        )
+    return classified
+
 
 @router.post("/demo")
 async def ingest_demo_dataset(session_id: str, limit: int = 80):

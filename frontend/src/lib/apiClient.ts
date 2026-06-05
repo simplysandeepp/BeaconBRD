@@ -240,6 +240,25 @@ export async function uploadFile(
     });
 }
 
+/**
+ * Upload a file that needs OCR (PDF, images) — sends to the OCR endpoint
+ * which extracts text and then ingests it into the session.
+ * The OCR processing is async; this returns once the file is accepted.
+ */
+export async function uploadFileForOcr(
+    sessionId: string,
+    file: File,
+    ext: string
+): Promise<{ message: string; chunk_count: number; filename: string }> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("session_id", sessionId);
+    return apiFetch<{ message: string; chunk_count: number; filename: string }>(
+        `/sessions/${sessionId}/ingest/upload-ocr`,
+        { method: "POST", body: form }
+    );
+}
+
 export async function ingestDemoDataset(
     sessionId: string,
     limit: number = 80,

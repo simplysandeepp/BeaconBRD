@@ -4,15 +4,16 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Hash, Mail, Upload, CheckCircle2, AlertCircle, Database,
-    Eye, RefreshCw, Trash2, FileText, File, Table2, X, Loader2, RotateCcw, ArrowRight
+    Hash, Mail, Upload, CheckCircle2, AlertCircle,
+    Eye, RefreshCw, Trash2, FileText, File, Table2, X, Loader2, RotateCcw, ArrowRight,
+    Image, FileScan, UploadCloud
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Drawer from '@/components/ui/Drawer';
 import Link from 'next/link';
 import {
     uploadFile,
-    ingestDemoDataset,
+    uploadFileForOcr,
     getChunks,
     restoreChunk,
     createSession,
@@ -40,11 +41,23 @@ import GmailReplica from '@/components/features/GmailWindow';
 
 const FILE_ICONS: Record<string, React.ReactNode> = {
     pdf: <FileText size={14} className="text-red-400" />,
+    docx: <FileText size={14} className="text-blue-400" />,
+    doc: <FileText size={14} className="text-blue-400" />,
     txt: <File size={14} className="text-zinc-400" />,
     csv: <Table2 size={14} className="text-emerald-400" />,
+    png: <Image size={14} className="text-purple-400" />,
+    jpg: <Image size={14} className="text-purple-400" />,
+    jpeg: <Image size={14} className="text-purple-400" />,
+    gif: <Image size={14} className="text-purple-400" />,
+    bmp: <Image size={14} className="text-purple-400" />,
+    tiff: <Image size={14} className="text-purple-400" />,
+    tif: <Image size={14} className="text-purple-400" />,
+    webp: <Image size={14} className="text-purple-400" />,
 };
 
 // ─── Upload File entry ────────────────────────────────────────────────────────
+
+const OCR_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'webp']);
 
 interface UploadedFile {
     name: string;
@@ -54,6 +67,7 @@ interface UploadedFile {
     status: 'queued' | 'uploading' | 'done' | 'error';
     chunkCount?: number;
     error?: string;
+    needsOcr?: boolean;
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -73,9 +87,6 @@ export default function IngestionPage() {
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
-    const [demoLoading, setDemoLoading] = useState(false);
-    const [demoResult, setDemoResult] = useState<string | null>(null);
-    const [demoLogs, setDemoLogs] = useState<string[]>([]);
 
     const [slackStatus, setSlackStatus] = useState<SlackStatus | null>(null);
     const [slackChannels, setSlackChannels] = useState<SlackChannel[]>([]);
@@ -245,11 +256,12 @@ export default function IngestionPage() {
 
     const addFiles = (files: File[]) => {
         const newEntries: UploadedFile[] = files.map(f => {
-            const ext = f.name.split('.').pop() ?? 'txt';
+            const ext = (f.name.split('.').pop() ?? 'txt').toLowerCase();
             const size = f.size > 1024 * 1024
                 ? `${(f.size / 1024 / 1024).toFixed(1)} MB`
                 : `${(f.size / 1024).toFixed(0)} KB`;
-            return { name: f.name, size, ext, rawFile: f, status: 'queued' };
+            const needsOcr = OCR_EXTENSIONS.has(ext);
+            return { name: f.name, size, ext, rawFile: f, status: 'queued', needsOcr };
         });
         setUploadedFiles(prev => [...prev, ...newEntries]);
     };
@@ -276,12 +288,18 @@ export default function IngestionPage() {
         setUploadError(null);
 
         for (const uf of queued) {
-            // mark uploading
             setUploadedFiles(prev => prev.map(f => f.name === uf.name ? { ...f, status: 'uploading' } : f));
             try {
-                const ext = uf.ext.toLowerCase();
-                const sourceType = ext === 'csv' ? 'csv' : 'file';
-                const result = await uploadFile(sid, uf.rawFile, sourceType);
+                let result;
+                if (uf.needsOcr) {
+                    // Send to OCR endpoint first, then ingest extracted text
+                    result = await uploadFileForOcr(sid, uf.rawFile, uf.ext);
+                } else {
+                    // Direct upload for text-based files
+                    const ext = uf.ext.toLowerCase();
+                    const sourceType = ext === 'csv' ? 'csv' : ext === 'docx' || ext === 'doc' ? 'docx' : 'file';
+                    result = await uploadFile(sid, uf.rawFile, sourceType);
+                }
                 setUploadedFiles(prev => prev.map(f =>
                     f.name === uf.name ? { ...f, status: 'done', chunkCount: result.chunk_count } : f
                 ));
@@ -295,39 +313,6 @@ export default function IngestionPage() {
         }
         setUploading(false);
         await refreshReviewGate(sid);
-    };
-
-    const processDemoDataset = async () => {
-        setDemoLoading(true);
-        setUploadError(null);
-        setDemoResult(null);
-        setDemoLogs([]);
-
-        try {
-            const sid = await ensureSessionId();
-            if (!sid) {
-                throw new Error('No active session. Create/select one first.');
-            }
-
-            const res = await ingestDemoDataset(sid, 200, (line) => {
-                const time = new Date().toISOString().split('T')[1].slice(0, 12);
-                setDemoLogs(prev => [...prev, `[${time}] ${line}`]);
-            });
-
-            if (res.logs.length === 0) {
-                const time = new Date().toISOString().split('T')[1].slice(0, 12);
-                setDemoLogs(prev => [...prev, `[${time}] Demo ingestion completed.`]);
-            }
-            setDemoResult(`✅ ${res.message}`);
-            await refreshReviewGate(sid);
-        } catch (e) {
-            const time = new Date().toISOString().split('T')[1].slice(0, 12);
-            const msg = e instanceof Error ? e.message : 'Demo ingestion failed';
-            setDemoLogs(prev => [...prev, `[${time}] ❌ ERROR: ${msg}`]);
-            setUploadError(msg);
-        } finally {
-            setDemoLoading(false);
-        }
     };
 
     const refreshReviewGate = async (sidOverride?: string) => {
@@ -687,11 +672,11 @@ export default function IngestionPage() {
                 >
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center">
-                            <Upload size={18} className="text-cyan-400" />
+                            <UploadCloud size={18} className="text-cyan-400" />
                         </div>
                         <div>
                             <h3 className="text-sm font-semibold text-zinc-100">File Upload</h3>
-                            <p className="text-[11px] text-zinc-500 mt-0.5">CSV, TXT · max 25MB</p>
+                            <p className="text-[11px] text-zinc-500 mt-0.5">PDF, DOCX, TXT, CSV, Images · max 25MB</p>
                         </div>
                     </div>
 
@@ -706,11 +691,16 @@ export default function IngestionPage() {
                             }`}
                         onClick={() => document.getElementById('file-input')?.click()}
                     >
-                        <Upload size={18} className={dragOver ? 'text-cyan-400' : 'text-zinc-600'} />
+                        <UploadCloud size={20} className={dragOver ? 'text-cyan-400' : 'text-zinc-600'} />
                         <p className="text-xs text-zinc-400 text-center">
                             Drop files here or <span className="text-cyan-400">browse</span>
                         </p>
-                        <input id="file-input" type="file" multiple accept=".csv,.txt" className="hidden"
+                        <p className="text-[10px] text-zinc-600 text-center">
+                            Documents, spreadsheets &amp; images — OCR for PDFs &amp; images
+                        </p>
+                        <input id="file-input" type="file" multiple
+                            accept=".pdf,.docx,.doc,.txt,.csv,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.webp"
+                            className="hidden"
                             onChange={e => addFiles(Array.from(e.target.files ?? []))}
                         />
                     </div>
@@ -722,6 +712,11 @@ export default function IngestionPage() {
                                 <div key={f.name} className="flex items-center gap-2.5 p-2 rounded-lg bg-white/4">
                                     {FILE_ICONS[f.ext] ?? <File size={14} className="text-zinc-400" />}
                                     <span className="text-xs text-zinc-300 flex-1 truncate">{f.name}</span>
+                                    {f.needsOcr && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/25 text-amber-400 flex-shrink-0 flex items-center gap-0.5">
+                                            <FileScan size={9} /> OCR
+                                        </span>
+                                    )}
                                     <span className="text-[10px] text-zinc-600 flex-shrink-0">{f.size}</span>
                                     {f.status === 'uploading' && <Loader2 size={12} className="text-cyan-400 animate-spin flex-shrink-0" />}
                                     {f.status === 'done' && (
@@ -740,82 +735,15 @@ export default function IngestionPage() {
                         </div>
                     )}
 
-                    {demoResult && (
-                        <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300">
-                            {demoResult}
-                        </div>
-                    )}
-
                     <button
                         onClick={processFiles}
-                        disabled={uploading || demoLoading || uploadedFiles.filter(f => f.status === 'queued').length === 0}
+                        disabled={uploading || uploadedFiles.filter(f => f.status === 'queued').length === 0}
                         className="btn-primary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {uploading
                             ? <><Loader2 size={13} className="animate-spin" /> Processing…</>
                             : <><Upload size={13} /> Process Files</>}
                     </button>
-
-                    <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-white/8" />
-                        </div>
-                        <div className="relative flex justify-center">
-                            <span className="bg-zinc-900 px-2 text-[10px] text-zinc-600">or use demo data</span>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={processDemoDataset}
-                        disabled={demoLoading || uploading}
-                        className="btn-secondary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border-dashed"
-                    >
-                        {demoLoading
-                            ? <><Loader2 size={13} className="animate-spin" /> Retrieving Emails…</>
-                            : <><Database size={13} className="text-cyan-400" /> Use Demo Dataset (Enron)</>}
-                    </button>
-
-                    {/* Terminal Logger for Demo Ingestion */}
-                    {demoLogs.length > 0 && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            className="bg-black/80 border border-white/10 rounded-lg p-3 mt-4 h-48 overflow-y-auto font-mono text-[10px] space-y-1.5 flex flex-col"
-                        >
-                            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/10 sticky top-0 bg-black/80 backdrop-blur z-10">
-                                <div className="flex gap-1.5">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
-                                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></div>
-                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></div>
-                                </div>
-                                <span className="text-zinc-500 ml-2">noise_filter.log</span>
-                            </div>
-
-                            {demoLogs.map((log, idx) => {
-                                const isError = log.includes('ERROR');
-                                const isSuccess = log.includes('Success');
-                                const isHeuristic = log.includes('Heuristic');
-                                const isLLM = log.includes('LLM');
-
-                                return (
-                                    <div key={idx} className={cn(
-                                        "leading-relaxed transition-opacity animate-in fade-in duration-300",
-                                        isError ? "text-red-400" :
-                                            isSuccess ? "text-emerald-400" :
-                                                isHeuristic ? "text-amber-300" :
-                                                    isLLM ? "text-purple-300" : "text-zinc-300"
-                                    )}>
-                                        {log}
-                                    </div>
-                                )
-                            })}
-                            {demoLoading && (
-                                <div className="flex items-center gap-2 text-zinc-500 mt-2">
-                                    <span className="animate-pulse">_</span>
-                                </div>
-                            )}
-                        </motion.div>
-                    )}
                 </motion.div>
             </div>
 
