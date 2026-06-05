@@ -14,6 +14,7 @@ import {
     listGmailEmails, type GmailEmail, type GmailSearchOptions,
     type GmailProfile, type GmailThread
 } from '@/lib/apiClient';
+import { getGmailCache, setGmailCache } from '@/lib/gmailCache';
 
 interface GmailReplicaProps {
     onClose: () => void;
@@ -28,9 +29,6 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [activeFolder, setActiveFolder] = useState('INBOX');
     const [nextPageToken, setNextPageToken] = useState<string | null>(null);
-    
-    // In-memory cache for the lifespan of this component render
-    const cacheRef = useRef<{ [key: string]: { emails: GmailEmail[], nextPageToken: string | null } }>({});
     
     // Auth & Profile
     const [status, setStatus] = useState<{connected: boolean, available: boolean} | null>(null);
@@ -89,16 +87,18 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
             const cacheKey = qParts.length > 0 ? qParts.join(' ') : `folder:${activeFolder}`;
 
             // 1. Check Cache before hitting API
-            if (!append && !options.pageToken && !options.forceRefresh && cacheRef.current[cacheKey]) {
-                const cached = cacheRef.current[cacheKey];
-                setEmails(cached.emails);
-                setNextPageToken(cached.nextPageToken);
-                setLoading(false);
-                return;
+            if (!append && !options.pageToken && !options.forceRefresh) {
+                const cached = getGmailCache(cacheKey);
+                if (cached) {
+                    setEmails(cached.emails);
+                    setNextPageToken(cached.nextPageToken);
+                    setLoading(false);
+                    return;
+                }
             }
 
             const res = await listGmailEmails({ 
-                count: 30, 
+                count: 10, 
                 ...options,
                 q: qParts.length > 0 ? qParts.join(' ') : undefined
             });
@@ -108,10 +108,10 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
 
             // 2. Save into Cache
             if (!append && !options.pageToken) {
-                cacheRef.current[cacheKey] = {
+                setGmailCache(cacheKey, {
                     emails: res.emails,
                     nextPageToken: res.next_page_token || null
-                };
+                });
             }
         } catch (e: any) {
             if (e.status === 401) {

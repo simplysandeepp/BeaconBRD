@@ -36,6 +36,7 @@ import {
 import { useSessionStore } from '@/store/useSessionStore';
 import { useAuth } from '@/contexts/AuthContext';
 import GmailReplica from '@/components/features/GmailWindow';
+import { getGmailCache, setGmailCache, clearGmailCache } from '@/lib/gmailCache';
 
 // ─── Static Connector Data ────────────────────────────────────────────────────
 
@@ -219,13 +220,20 @@ export default function IngestionPage() {
         try {
             const status = await getGmailStatus();
             setGmailStatus(status);
-            if (status.connected && fetchEmails) {
-                const res = await listGmailEmails({ count: 10 });
-                setGmailEmails(res.emails);
+            if (status.connected) {
+                const cached = getGmailCache('folder:INBOX');
+                if (cached && !fetchEmails) {
+                    setGmailEmails(cached.emails);
+                } else if (fetchEmails) {
+                    const res = await listGmailEmails({ count: 10 });
+                    setGmailEmails(res.emails);
+                    setGmailCache('folder:INBOX', { emails: res.emails, nextPageToken: res.next_page_token || null });
+                }
             } else if (!status.connected) {
                 setGmailEmails([]);
                 setSelectedGmailEmails([]);
                 setGmailMessage(null);
+                clearGmailCache();
             }
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to load Gmail integration data');
