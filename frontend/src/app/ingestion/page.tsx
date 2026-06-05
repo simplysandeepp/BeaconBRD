@@ -70,6 +70,16 @@ interface UploadedFile {
     needsOcr?: boolean;
 }
 
+interface ActiveSource {
+    id: string;
+    kind: 'file' | 'slack' | 'gmail';
+    name: string;
+    ext: string;
+    status: 'queued' | 'uploading' | 'done' | 'error';
+    chunkCount?: number;
+    meta?: Record<string, any>;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function IngestionPage() {
@@ -106,6 +116,51 @@ export default function IngestionPage() {
     const [suppressedSignals, setSuppressedSignals] = useState<Chunk[]>([]);
     const [restoringChunkId, setRestoringChunkId] = useState<string | null>(null);
     const [gmailReplicaOpen, setGmailReplicaOpen] = useState(false);
+    const [slackSyncedChannels, setSlackSyncedChannels] = useState<Set<string>>(new Set());
+    const [gmailSyncedEmails, setGmailSyncedEmails] = useState<Set<string>>(new Set());
+
+    // Build unified active sources list
+    const activeSources: ActiveSource[] = [
+        // Files
+        ...uploadedFiles.map((f): ActiveSource => ({
+            id: f.name,
+            kind: 'file',
+            name: f.name,
+            ext: f.ext.toUpperCase(),
+            status: f.status,
+            chunkCount: f.chunkCount,
+        })),
+        // Slack channels
+        ...selectedSlackChannels
+            .map((chId): ActiveSource | null => {
+                const ch = slackChannels.find((c) => c.id === chId);
+                if (!ch) return null;
+                return {
+                    id: chId,
+                    kind: 'slack',
+                    name: `#${ch.name}`,
+                    ext: 'SLACK',
+                    status: slackSyncedChannels.has(chId) ? 'done' : 'queued',
+                    chunkCount: slackSyncedChannels.has(chId) ? undefined : undefined,
+                };
+            })
+            .filter((s): s is ActiveSource => s !== null),
+        // Gmail emails
+        ...selectedGmailEmails
+            .map((emailId): ActiveSource | null => {
+                const em = gmailEmails.find((e) => e.message_id === emailId);
+                if (!em) return null;
+                return {
+                    id: emailId,
+                    kind: 'gmail',
+                    name: em.subject || '(No Subject)',
+                    ext: 'GMAIL',
+                    status: gmailSyncedEmails.has(emailId) ? 'done' : 'queued',
+                    chunkCount: undefined,
+                };
+            })
+            .filter((s): s is ActiveSource => s !== null),
+    ];
 
     const ensureSessionId = async (): Promise<string> => {
         if (sessionId) return sessionId;
@@ -208,6 +263,11 @@ export default function IngestionPage() {
         try {
             const result = await ingestGmailEmails(sid, idsToIngest, includeAttachments);
             setGmailMessage(result.message);
+            setGmailSyncedEmails((prev) => {
+                const next = new Set(prev);
+                idsToIngest.forEach((id) => next.add(id));
+                return next;
+            });
             await refreshReviewGate(sid);
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Gmail sync failed');
@@ -246,6 +306,11 @@ export default function IngestionPage() {
         try {
             const result = await ingestSlackChannels(sid, selectedSlackChannels);
             setSlackMessage(result.message);
+            setSlackSyncedChannels((prev) => {
+                const next = new Set(prev);
+                selectedSlackChannels.forEach((id) => next.add(id));
+                return next;
+            });
             await refreshReviewGate(sid);
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Slack sync failed');
@@ -747,13 +812,14 @@ export default function IngestionPage() {
                 </motion.div>
             </div>
 
-            {/* S2-02: Active Sources Table — shows real uploaded files */}
+            {/* S2-02: Active Sources Table — unified files + slack + gmail */}
             <motion.div
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.2 }}
                 className="glass-card rounded-xl overflow-hidden"
             >
-                <div className="px-5 py-4 border-b border-white/8">
+                <div className="px-5 py-4 border-b border-white/8 flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-zinc-200">Active Sources</h2>
+                    <span className="text-[10px] text-zinc-500 font-mono">{activeSources.length} source{activeSources.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -765,24 +831,28 @@ export default function IngestionPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                            {uploadedFiles.length === 0 ? (
+                            {activeSources.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="px-5 py-8 text-center text-xs text-zinc-600">
-                                        No files uploaded yet. Use the File Upload panel above.
+                                        No active sources. Upload files, select Slack channels, or select Gmail emails.
                                     </td>
                                 </tr>
-                            ) : uploadedFiles.map((src, i) => (
+                            ) : activeSources.map((src, i) => (
                                 <motion.tr
-                                    key={src.name}
+                                    key={`${src.kind}-${src.id}`}
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.25 + i * 0.05 }}
+                                    transition={{ delay: 0.25 + i * 0.03 }}
                                     className="hover:bg-white/4 transition-colors"
                                 >
                                     <td className="px-5 py-3.5">
                                         <div className="flex items-center gap-2.5">
-                                            {FILE_ICONS[src.ext] ?? <File size={13} className="text-zinc-400" />}
-                                            <span className="font-mono text-xs text-zinc-300">{src.name}</span>
+                                            {src.kind === 'file' && (FILE_ICONS[src.ext.toLowerCase()] ?? <File size={13} className="text-zinc-400" />)}
+                                            {src.kind === 'slack' && <Hash size={13} className="text-[#e01e5a]" />}
+                                            {src.kind === 'gmail' && <Mail size={13} className="text-emerald-400" />}
+                                            <span className={`font-mono text-xs ${src.kind === 'gmail' ? 'text-zinc-300' : 'text-zinc-300'} truncate max-w-[200px]`} title={src.name}>
+                                                {src.name}
+                                            </span>
                                         </div>
                                     </td>
                                     <td className="px-5 py-3.5">
@@ -792,23 +862,49 @@ export default function IngestionPage() {
                                         {src.status === 'error' && <span className="glass-badge badge-severity-high">Error</span>}
                                     </td>
                                     <td className="px-5 py-3.5 font-mono text-xs text-zinc-300">{src.chunkCount ?? '—'}</td>
-                                    <td className="px-5 py-3.5 text-xs text-zinc-500 uppercase font-mono">{src.ext}</td>
+                                    <td className="px-5 py-3.5">
+                                        {src.kind === 'file' && <span className="text-xs text-zinc-500 uppercase font-mono">{src.ext}</span>}
+                                        {src.kind === 'slack' && <span className="glass-badge bg-[#4A154B]/30 border border-[#4A154B]/40 text-[#e01e5a] text-[10px] font-bold">SLACK</span>}
+                                        {src.kind === 'gmail' && <span className="glass-badge bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">GMAIL</span>}
+                                    </td>
                                     <td className="px-5 py-3.5">
                                         <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={() => openDrawer(src.name)}
-                                                className="p-1.5 rounded-lg text-zinc-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-                                                title="View Chunks"
-                                            >
-                                                <Eye size={13} />
-                                            </button>
-                                            <button
-                                                onClick={() => removeFile(src.name)}
-                                                className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                                title="Remove"
-                                            >
-                                                <Trash2 size={13} />
-                                            </button>
+                                            {src.kind === 'file' && (
+                                                <button
+                                                    onClick={() => openDrawer(src.name)}
+                                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                                                    title="View Chunks"
+                                                >
+                                                    <Eye size={13} />
+                                                </button>
+                                            )}
+                                            {src.kind === 'file' && (
+                                                <button
+                                                    onClick={() => removeFile(src.name)}
+                                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                    title="Remove"
+                                                >
+                                                    <Trash2 size={13} />
+                                                </button>
+                                            )}
+                                            {src.kind === 'slack' && (
+                                                <button
+                                                    onClick={() => setSelectedSlackChannels((prev) => prev.filter((id) => id !== src.id))}
+                                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                    title="Remove"
+                                                >
+                                                    <Trash2 size={13} />
+                                                </button>
+                                            )}
+                                            {src.kind === 'gmail' && (
+                                                <button
+                                                    onClick={() => setSelectedGmailEmails((prev) => prev.filter((id) => id !== src.id))}
+                                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                    title="Remove"
+                                                >
+                                                    <Trash2 size={13} />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </motion.tr>
