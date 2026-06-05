@@ -174,7 +174,7 @@ export default function IngestionPage() {
         }
     };
 
-    const syncSlackData = async () => {
+    const syncSlackData = async (fetchChannels = false) => {
         setSlackLoading(true);
         try {
             const status = await getSlackStatus();
@@ -185,9 +185,11 @@ export default function IngestionPage() {
                 setSlackMessage(null);
                 return;
             }
-            const res = await listSlackChannels();
-            setSlackChannels(res.channels);
-            setSelectedSlackChannels((prev) => prev.filter((id) => res.channels.some((c) => c.id === id)));
+            if (fetchChannels) {
+                const res = await listSlackChannels();
+                setSlackChannels(res.channels);
+                setSelectedSlackChannels((prev) => prev.filter((id) => res.channels.some((c) => c.id === id)));
+            }
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to load Slack integration data');
         } finally {
@@ -212,15 +214,15 @@ export default function IngestionPage() {
         }
     };
 
-    const syncGmailData = async () => {
+    const syncGmailData = async (fetchEmails = false) => {
         setGmailLoading(true);
         try {
             const status = await getGmailStatus();
             setGmailStatus(status);
-            if (status.connected) {
+            if (status.connected && fetchEmails) {
                 const res = await listGmailEmails({ count: 10 });
                 setGmailEmails(res.emails);
-            } else {
+            } else if (!status.connected) {
                 setGmailEmails([]);
                 setSelectedGmailEmails([]);
                 setGmailMessage(null);
@@ -440,7 +442,7 @@ export default function IngestionPage() {
         const slackReason = searchParams.get('reason');
         if (slackParam === 'connected') {
             setSlackMessage('Slack workspace connected.');
-            syncSlackData();
+            syncSlackData(true);
         } else if (slackParam === 'error') {
             setUploadError(slackReason ? `Slack OAuth failed: ${slackReason}` : 'Slack OAuth failed. Please try again.');
         }
@@ -449,7 +451,7 @@ export default function IngestionPage() {
         const gmailReason = searchParams.get('reason');
         if (gmailParam === 'connected') {
             setGmailMessage('Gmail connected.');
-            syncGmailData();
+            syncGmailData(true);
         } else if (gmailParam === 'error') {
             setUploadError(gmailReason ? `Gmail OAuth failed: ${gmailReason}` : 'Gmail OAuth failed. Please try again.');
         }
@@ -508,19 +510,31 @@ export default function IngestionPage() {
                     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
                     className="glass-card p-3 sm:p-5 rounded-xl space-y-3 sm:space-y-4"
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#4A154B]/40 border border-[#4A154B]/60 flex items-center justify-center">
-                            <Hash size={18} className="text-[#e01e5a]" />
-                        </div>
-                        <div>
-                            <h3 className="text-sm font-semibold text-zinc-100">Slack</h3>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                                <div className={`w-1.5 h-1.5 rounded-full ${slackStatus?.connected ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
-                                <span className={`text-[11px] font-medium ${slackStatus?.connected ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                                    {slackStatus?.connected ? 'Connected' : 'Disconnected'}
-                                </span>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-[#4A154B]/40 border border-[#4A154B]/60 flex items-center justify-center">
+                                <Hash size={18} className="text-[#e01e5a]" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-zinc-100">Slack</h3>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${slackStatus?.connected ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                                    <span className={`text-[11px] font-medium ${slackStatus?.connected ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                        {slackStatus?.connected ? 'Connected' : 'Disconnected'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
+                        {slackStatus?.connected && (
+                            <button
+                                onClick={() => syncSlackData(true)}
+                                disabled={slackLoading}
+                                title="Sync Channels"
+                                className="p-2 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-50"
+                            >
+                                <RefreshCw size={14} className={slackLoading ? 'animate-spin' : ''} />
+                            </button>
+                        )}
                     </div>
 
                     <p className="text-xs text-zinc-500">
@@ -609,47 +623,59 @@ export default function IngestionPage() {
                     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.07 }}
                     className="glass-card p-3 sm:p-5 rounded-xl space-y-3 sm:space-y-4"
                 >
-                    <div className="flex items-center gap-3">
-                        <div
-                            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
-                                gmailStatus?.connected
-                                    ? 'bg-emerald-500/15 border-emerald-500/25'
-                                    : gmailStatus?.available
-                                        ? 'bg-blue-500/15 border-blue-500/25'
-                                        : 'bg-white/5 border-white/10'
-                            }`}
-                        >
-                            <Mail size={18} className={gmailStatus?.connected ? 'text-emerald-400' : gmailStatus?.available ? 'text-blue-300' : 'text-zinc-600'} />
-                        </div>
-                        <div>
-                            <h3 className="text-sm font-semibold text-zinc-100">Gmail</h3>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                                <div
-                                    className={`w-1.5 h-1.5 rounded-full ${
-                                        gmailLoading
-                                            ? 'bg-zinc-500 animate-pulse'
-                                            : gmailStatus?.connected
-                                                ? 'bg-emerald-400'
-                                                : gmailStatus?.available
-                                                    ? 'bg-blue-400'
-                                                    : 'bg-zinc-600'
-                                    }`}
-                                />
-                                <span
-                                    className={`text-[11px] font-medium ${
-                                        gmailLoading
-                                            ? 'text-zinc-500'
-                                            : gmailStatus?.connected
-                                                ? 'text-emerald-400'
-                                                : gmailStatus?.available
-                                                    ? 'text-blue-300'
-                                                    : 'text-zinc-500'
-                                    }`}
-                                >
-                                    {gmailLoading ? 'Syncing...' : gmailStatus?.connected ? 'Connected' : gmailStatus?.available ? 'Available' : 'Unavailable'}
-                                </span>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div
+                                className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
+                                    gmailStatus?.connected
+                                        ? 'bg-emerald-500/15 border-emerald-500/25'
+                                        : gmailStatus?.available
+                                            ? 'bg-blue-500/15 border-blue-500/25'
+                                            : 'bg-white/5 border-white/10'
+                                }`}
+                            >
+                                <Mail size={18} className={gmailStatus?.connected ? 'text-emerald-400' : gmailStatus?.available ? 'text-blue-300' : 'text-zinc-600'} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-zinc-100">Gmail</h3>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <div
+                                        className={`w-1.5 h-1.5 rounded-full ${
+                                            gmailLoading
+                                                ? 'bg-zinc-500 animate-pulse'
+                                                : gmailStatus?.connected
+                                                    ? 'bg-emerald-400'
+                                                    : gmailStatus?.available
+                                                        ? 'bg-blue-400'
+                                                        : 'bg-zinc-600'
+                                        }`}
+                                    />
+                                    <span
+                                        className={`text-[11px] font-medium ${
+                                            gmailLoading
+                                                ? 'text-zinc-500'
+                                                : gmailStatus?.connected
+                                                    ? 'text-emerald-400'
+                                                    : gmailStatus?.available
+                                                        ? 'text-blue-300'
+                                                        : 'text-zinc-500'
+                                        }`}
+                                    >
+                                        {gmailLoading ? 'Syncing...' : gmailStatus?.connected ? 'Connected' : gmailStatus?.available ? 'Available' : 'Unavailable'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
+                        {gmailStatus?.connected && (
+                            <button
+                                onClick={() => syncGmailData(true)}
+                                disabled={gmailLoading}
+                                title="Sync Emails"
+                                className="p-2 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-50"
+                            >
+                                <RefreshCw size={14} className={gmailLoading ? 'animate-spin' : ''} />
+                            </button>
+                        )}
                     </div>
 
                     <p className="text-xs text-zinc-500">
@@ -718,13 +744,6 @@ export default function IngestionPage() {
                             >
                                 {gmailSyncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
                                 {gmailSyncing ? 'Ingesting...' : 'Ingest Selected'}
-                            </button>
-                            <button
-                                onClick={syncGmailData}
-                                className="btn-secondary w-full text-xs py-2"
-                            >
-                                <RefreshCw size={12} className="inline mr-1" />
-                                Refresh Status
                             </button>
                         </div>
                     )}
