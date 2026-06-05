@@ -428,8 +428,8 @@ function Footer() {
 
                     <p className="text-gray-600 text-xs mt-4">
                         © {new Date().getFullYear()} Beacon. Built by{' '}
-                        <a href="https://www.sandeepp.in/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors">
-                            Sandeep Prajapati
+                        <a  className="text-zinc-400 hover:text-white transition-colors">
+                            Team FineTuners
                         </a>
                         . All rights reserved.
                     </p>
