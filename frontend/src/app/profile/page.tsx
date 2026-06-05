@@ -16,6 +16,7 @@ import {
     Database,
     Hash,
     RefreshCw,
+    ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -58,45 +59,13 @@ const dataSources = [
         description: "Sync email threads and discussions",
         available: true,
     },
-    {
-        id: "teams",
-        name: "MS Teams",
-        icon: UsersIcon,
-        color: "from-blue-600 to-indigo-600",
-        description: "Import team conversations and channels",
-        available: false,
-    },
-    {
-        id: "fireflies",
-        name: "Meetings (Fireflies)",
-        icon: Video,
-        color: "from-blue-500 to-cyan-500",
-        description: "Auto-sync meeting transcriptions",
-        available: false,
-    },
-    {
-        id: "documents",
-        name: "Documents",
-        icon: FileText,
-        color: "from-green-500 to-emerald-500",
-        description: "Upload and analyze PDF, DOCX, TXT files",
-        available: false,
-    },
-    {
-        id: "calendar",
-        name: "Calendar",
-        icon: Calendar,
-        color: "from-yellow-500 to-amber-500",
-        description: "Extract requirements from calendar events",
-        available: false,
-    },
 ];
 
 export default function ProfilePage() {
     const searchParams = useSearchParams();
     const { user, updateUser } = useAuthStore();
     const { integrations, updateIntegration } = useIntegrationStore();
-    const { activeSessionId } = useSessionStore();
+    const { activeSessionId, sessions, setActive } = useSessionStore();
 
     const [editingProfile, setEditingProfile] = useState(false);
     const [slackStatus, setSlackStatus] = useState<SlackStatus | null>(null);
@@ -365,12 +334,6 @@ export default function ProfilePage() {
             {/* Header / User Profile */}
             <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6 border-b border-white/5 pb-8">
                 <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="relative">
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-zinc-100 text-2xl font-bold">
-                            {user?.name?.charAt(0) || "U"}
-                        </div>
-                        <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-emerald-500 border-4 border-zinc-950 rounded-full" />
-                    </div>
                     <div className="text-center md:text-left">
                         <h1 className="text-2xl font-bold text-zinc-100">{user?.name || "User Profile"}</h1>
                         <p className="text-zinc-500 text-sm mt-0.5">{user?.email}</p>
@@ -451,11 +414,10 @@ export default function ProfilePage() {
 
             {(slackError || slackMessage || gmailError || gmailMessage) && (
                 <div
-                    className={`px-4 py-2.5 rounded-xl border flex items-center gap-2 text-xs transition-all ${
-                        (slackError || gmailError) ? "border-red-500/20 bg-red-500/10 text-red-300" : "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-                    }`}
+                    className={`px-4 py-2.5 rounded-xl border flex items-center gap-2 text-xs transition-all ${(slackError || gmailError) ? "border-red-500/20 bg-red-500/10 text-red-300" : "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                        }`}
                 >
-                    { (slackError || gmailError) ? <XCircle size={14} /> : <CheckCircle2 size={14} /> }
+                    {(slackError || gmailError) ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
                     <span>{slackError ?? slackMessage ?? gmailError ?? gmailMessage}</span>
                 </div>
             )}
@@ -463,29 +425,21 @@ export default function ProfilePage() {
             {/* S2-01 style Connector Cards */}
             <div>
                 <div className="mb-6">
-                    <h2 className="text-base font-bold text-zinc-100">Data Ingestion Sources</h2>
+                    <h2 className="text-base font-bold text-zinc-100">Manage Connectors</h2>
                     <p className="text-xs text-zinc-500 mt-0.5">Connect and manage your data bridge connectors</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
                     {dataSources.map((source) => {
                         const isSlack = source.id === "slack";
                         const isGmail = source.id === "gmail";
                         const isConnected = isSlack ? Boolean(slackStatus?.connected) : isGmail ? Boolean(gmailStatus?.connected) : false;
 
                         return (
-                            <div key={source.id} className="glass-card p-5 rounded-xl border-white/5 space-y-4 flex flex-col relative overflow-hidden group">
-                                {!source.available && (
-                                    <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
-                                        <span className="px-2 py-0.5 bg-zinc-800 border border-white/10 rounded-full text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
-                                            Coming Soon
-                                        </span>
-                                    </div>
-                                )}
-                                
+                            <div key={source.id} className="glass-card p-4 rounded-xl border-white/5 flex items-center justify-between gap-4 relative overflow-hidden group">
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
-                                        "w-10 h-10 rounded-xl border flex items-center justify-center transition-colors shadow-sm",
+                                        "w-10 h-10 rounded-xl border flex items-center justify-center transition-colors shadow-sm flex-shrink-0",
                                         isSlack ? "bg-[#4A154B]/20 border-[#4A154B]/40" : 
                                         isGmail ? "bg-red-500/10 border-red-500/20" : 
                                         "bg-white/5 border-white/10"
@@ -496,104 +450,151 @@ export default function ProfilePage() {
                                     </div>
                                     <div>
                                         <h3 className="text-sm font-semibold text-zinc-100">{source.name}</h3>
-                                        {source.available && (
-                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${isConnected ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                                                    {isConnected ? 'Connected' : 'Inactive'}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                                            <span className={`text-[10px] font-bold uppercase tracking-wider ${isConnected ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                                {isConnected ? 'Connected' : 'Inactive'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <p className="text-xs text-zinc-500 leading-relaxed flex-1">{source.description}</p>
-
-                                {isSlack && isConnected && (
-                                    <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-300 pt-2 border-t border-white/5">
-                                        <div className="flex items-center justify-between text-[10px]">
-                                            <span className="text-zinc-500 uppercase tracking-wider">Workspace</span>
-                                            <span className="text-cyan-400 font-mono">{slackStatus?.team_name ?? "Connected"}</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Channels</p>
-                                            <div className="max-h-32 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
-                                                {slackChannels.length === 0 ? (
-                                                    <p className="text-[10px] text-zinc-600 italic px-2">{slackLoading ? "Loading..." : "None found"}</p>
-                                                ) : (
-                                                    slackChannels.slice(0, 20).map((channel) => (
-                                                        <label key={channel.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white/5 transition-colors cursor-pointer group/item">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedSlackChannels.includes(channel.id)}
-                                                                onChange={() =>
-                                                                    setSelectedSlackChannels((prev) =>
-                                                                        prev.includes(channel.id)
-                                                                            ? prev.filter((id) => id !== channel.id)
-                                                                            : [...prev, channel.id]
-                                                                    )
-                                                                }
-                                                                className="w-3.5 h-3.5 rounded border-white/10 bg-zinc-950 text-cyan-500"
-                                                            />
-                                                            <span className="text-[11px] text-zinc-400 font-mono truncate group-hover/item:text-zinc-200">#{channel.name}</span>
-                                                        </label>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {isGmail && isConnected && (
-                                    <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-300 pt-2 border-t border-white/5">
-                                        <div className="flex items-center justify-between text-[10px]">
-                                            <span className="text-zinc-500 uppercase tracking-wider">Status</span>
-                                            <span className="text-emerald-400 font-bold">AUTHENTICATED</span>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {source.available && (
-                                    <div className="pt-2 mt-auto space-y-2 text-center">
-                                        {isConnected ? (
-                                            <>
-                                                {isSlack && (
-                                                    <button
-                                                        onClick={ingestSelectedSlackChannels}
-                                                        disabled={slackIngesting || selectedSlackChannels.length === 0}
-                                                        className="w-full py-2 rounded-lg font-bold text-xs transition-all bg-white text-zinc-950 hover:bg-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed uppercase tracking-wider"
-                                                    >
-                                                        {slackIngesting ? "Ingesting..." : "Sync Selected"}
-                                                    </button>
-                                                )}
-                                                <button
-                                                    onClick={isSlack ? disconnectSlackWorkspace : disconnectGmailAccount}
-                                                    className="text-[10px] font-bold text-zinc-600 hover:text-red-400 transition-colors uppercase tracking-widest"
-                                                >
-                                                    Disconnect
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <button
-                                                onClick={isSlack ? connectSlack : connectGmail}
-                                                className={cn(
-                                                    "w-full py-2 rounded-lg font-bold text-xs transition-all uppercase tracking-wider",
-                                                    isSlack ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-red-500 text-white hover:bg-red-600"
-                                                )}
-                                            >
-                                                Connect {source.name}
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
+                                <div className="flex-shrink-0">
+                                    {isConnected ? (
+                                        <button
+                                            onClick={isSlack ? disconnectSlackWorkspace : disconnectGmailAccount}
+                                            className="px-3.5 py-1.5 rounded-lg font-bold text-xs bg-white/5 hover:bg-red-500/10 hover:text-red-400 border border-white/10 hover:border-red-500/20 text-zinc-400 transition-all uppercase tracking-wider"
+                                        >
+                                            Disconnect
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={isSlack ? connectSlack : connectGmail}
+                                            className={cn(
+                                                "px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all uppercase tracking-wider",
+                                                isSlack ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-red-500 text-white hover:bg-red-600"
+                                            )}
+                                        >
+                                            Connect
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         );
                     })}
                 </div>
             </div>
 
+            {/* BRD Sessions Linked to Account */}
+            <div className="pt-6 border-t border-white/5">
+                <div className="mb-6">
+                    <h2 className="text-base font-bold text-zinc-100">Linked BRD Sessions</h2>
+                    <p className="text-xs text-zinc-500 mt-0.5">Manage and activate the Business Requirement Document sessions linked to this account</p>
+                </div>
+
+                {sessions.length === 0 ? (
+                    <div className="glass-card p-8 rounded-xl border-white/5 text-center bg-white/[0.01]">
+                        <FileText className="mx-auto text-zinc-600 mb-3" size={32} />
+                        <p className="text-sm text-zinc-400">No BRD sessions found linked to this account.</p>
+                        <p className="text-xs text-zinc-500 mt-1">Go to the Dashboard to create a new session.</p>
+                        <Link href="/dashboard" className="inline-block mt-4">
+                            <button className="btn-primary text-xs flex items-center gap-1.5">
+                                Go to Dashboard
+                                <ArrowRight size={12} />
+                            </button>
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {sessions.map((sess) => {
+                            const isActive = sess.id === activeSessionId;
+                            return (
+                                <div
+                                    key={sess.id}
+                                    className={cn(
+                                        "glass-card p-4 rounded-xl border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-white/10 hover:bg-white/[0.02]",
+                                        isActive && "border-cyan-500/20 bg-cyan-500/[0.02] hover:border-cyan-500/30"
+                                    )}
+                                >
+                                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                                        <div className={cn(
+                                            "w-10 h-10 rounded-xl border flex items-center justify-center flex-shrink-0 transition-colors",
+                                            isActive ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-400" : "bg-white/5 border-white/10 text-zinc-400"
+                                        )}>
+                                            <FileText size={18} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h3 className="text-sm font-semibold text-zinc-100 truncate">{sess.name}</h3>
+                                                {isActive && (
+                                                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[9px] font-bold uppercase tracking-wider">
+                                                        Active Session
+                                                    </span>
+                                                )}
+                                                {sess.role && (
+                                                    <span className={cn(
+                                                        "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                                                        sess.role === "owner" ? "bg-purple-500/10 border border-purple-500/20 text-purple-400" :
+                                                        sess.role === "editor" ? "bg-blue-500/10 border border-blue-500/20 text-blue-400" :
+                                                        "bg-zinc-500/10 border border-zinc-500/20 text-zinc-400"
+                                                    )}>
+                                                        {sess.role}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-zinc-500 truncate mt-0.5">
+                                                {sess.description || "No description provided."}
+                                            </p>
+                                            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-zinc-600 font-mono">
+                                                <span>ID: {sess.id}</span>
+                                                <span>•</span>
+                                                <span>Created: {new Date(sess.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 self-end md:self-auto flex-shrink-0">
+                                        <div className="text-right hidden sm:block">
+                                            <div className="flex items-center gap-1.5 justify-end">
+                                                <span className={cn(
+                                                    "w-1.5 h-1.5 rounded-full",
+                                                    sess.status === "active" ? "bg-emerald-400" :
+                                                    sess.status === "complete" ? "bg-cyan-400" :
+                                                    "bg-zinc-500"
+                                                )} />
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                                    {sess.status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {isActive ? (
+                                            <Link href="/dashboard">
+                                                <button className="flex items-center gap-1.5 px-3.5 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg text-cyan-400 text-xs font-bold transition-all uppercase tracking-wider">
+                                                    Open Dashboard
+                                                    <ArrowRight size={12} />
+                                                </button>
+                                            </Link>
+                                        ) : (
+                                            <Link href="/dashboard">
+                                                <button
+                                                    onClick={() => setActive(sess.id)}
+                                                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-zinc-300 hover:text-white text-xs font-bold transition-all uppercase tracking-wider"
+                                                >
+                                                    Activate &amp; Open
+                                                    <ArrowRight size={12} />
+                                                </button>
+                                            </Link>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
             {/* S1-04 style Stats Row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-white/5">
                 <div className="glass-card p-4 rounded-xl border-white/5 text-center bg-white/[0.01]">
                     <p className="text-2xl font-bold text-zinc-100">{activeSources}</p>
                     <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mt-1">Active Sources</p>
