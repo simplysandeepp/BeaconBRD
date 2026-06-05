@@ -304,10 +304,9 @@ def gmail_labels(request: Request):
         results = gmail.execute_with_retry(service.users().labels().list(userId='me'))
         labels = results.get('labels', [])
         
-        system_ids = ['INBOX', 'STARRED', 'SENT', 'DRAFTS', 'SPAM', 'TRASH']
         filtered_labels = []
         for l in labels:
-            if l['id'] in system_ids or l.get('labelListVisibility') != 'labelHide':
+            if l.get('type') == 'user' and l.get('labelListVisibility') != 'labelHide':
                 filtered_labels.append(l)
         
         return {"labels": filtered_labels}
