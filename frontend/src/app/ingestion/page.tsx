@@ -466,9 +466,26 @@ export default function IngestionPage() {
         <>
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1400px]">
             {/* Header */}
-            <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-zinc-100">Source Management</h1>
-                <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">Connect and manage your data sources</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-xl sm:text-2xl font-bold text-zinc-100">Source Management</h1>
+                    <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">Connect and manage your data sources</p>
+                </div>
+                {(slackStatus?.connected || gmailStatus?.connected) && (
+                    <button
+                        onClick={async () => {
+                            await Promise.all([
+                                slackStatus?.connected ? syncSlackData(true) : Promise.resolve(),
+                                gmailStatus?.connected ? syncGmailData(true) : Promise.resolve()
+                            ]);
+                        }}
+                        disabled={slackLoading || gmailLoading}
+                        className="btn-primary flex items-center gap-2 text-xs font-semibold px-4 py-2"
+                    >
+                        <RefreshCw size={14} className={slackLoading || gmailLoading ? "animate-spin" : ""} />
+                        Sync All
+                    </button>
+                )}
             </div>
 
             {/* Error banner */}
@@ -606,13 +623,7 @@ export default function IngestionPage() {
                                 className="btn-primary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {slackSyncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                                {slackSyncing ? 'Syncing...' : 'Sync Selected'}
-                            </button>
-                            <button
-                                onClick={disconnectSlackWorkspace}
-                                className="btn-secondary w-full text-xs py-2 border-red-500/20 text-red-300 hover:bg-red-500/10"
-                            >
-                                Disconnect Slack
+                                {slackSyncing ? 'Ingesting...' : 'Ingest Selected'}
                             </button>
                         </div>
                     )}

@@ -9,10 +9,10 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { 
-    getGmailStatus, getGmailProfile, getGmailLabels, 
+    getGmailStatus, getGmailProfile, 
     getGmailThreadFull, getGmailAttachment, getGmailOAuthUrl,
     listGmailEmails, type GmailEmail, type GmailSearchOptions,
-    type GmailProfile, type GmailLabel, type GmailThread
+    type GmailProfile, type GmailThread
 } from '@/lib/apiClient';
 
 interface GmailReplicaProps {
@@ -35,7 +35,6 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
     // Auth & Profile
     const [status, setStatus] = useState<{connected: boolean, available: boolean} | null>(null);
     const [profile, setProfile] = useState<GmailProfile | null>(null);
-    const [labels, setLabels] = useState<GmailLabel[]>([]);
     
     // View state
     const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
@@ -55,9 +54,8 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
             const s = await getGmailStatus();
             setStatus(s);
             if (s.connected) {
-                const [p, l] = await Promise.all([getGmailProfile(), getGmailLabels()]);
+                const p = await getGmailProfile();
                 setProfile(p);
-                setLabels(l.labels);
             }
         } catch (e) {
             console.error("Failed to fetch Gmail status:", e);
@@ -395,32 +393,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                             );
                         })}
 
-                        {labels.length > 0 && (
-                            <>
-                                <div className="h-px bg-white/5 my-4 mx-2" />
-                                {!sidebarCollapsed && <p className="px-3 mb-2 text-[9px] font-bold text-zinc-600 uppercase tracking-widest">Labels</p>}
-                                {labels.map(label => {
-                                    const isActive = activeFolder === label.id;
-                                    return (
-                                        <button 
-                                            key={label.id}
-                                            onClick={() => { setActiveFolder(label.id); setViewMode('list'); setSearchQuery(''); }}
-                                            className={cn(
-                                                "w-full flex items-center gap-4 px-3 py-2 rounded-lg transition-all border",
-                                                isActive 
-                                                    ? "bg-white/10 text-zinc-100 font-bold border-white/10" 
-                                                    : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300 border-transparent"
-                                            )}
-                                        >
-                                            <div className="flex-shrink-0 w-4.5 flex justify-center">
-                                                <div className={cn("w-1.5 h-1.5 rounded-full border", isActive ? "border-cyan-400 bg-cyan-400" : "border-zinc-700")} />
-                                            </div>
-                                            {!sidebarCollapsed && <span className="text-xs truncate">{label.name}</span>}
-                                        </button>
-                                    );
-                                })}
-                            </>
-                        )}
+
                     </div>
                 </motion.div>
 
