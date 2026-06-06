@@ -1,10 +1,3 @@
-/* —— COMMENTED OUT (original) ——
-   The original root layout with AuthProvider + fonts has been disabled
-   so the static landing page at /public/landing.html serves as the main
-   landing page. The AuthProvider is NOT wrapped globally anymore.
-
-   To restore: uncomment the original code below and restore page.tsx.
-
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import '@/styles/globals.css';
@@ -24,21 +17,21 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
     title: 'Beacon',
-    description: 'AI-Powered Business Requirements Generator',
+    description: 'AI-Powered Business Requirements Generator — transform conversations into professional BRDs',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
     return (
         <html lang="en" className="dark">
             <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-                <AuthProvider>{children}</AuthProvider>
+                <AuthProvider>
+                    {children}
+                </AuthProvider>
             </body>
         </html>
     );
-}
-*/
-
-// Minimal pass-through layout while static landing page is active
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-    return <>{children}</>;
 }
