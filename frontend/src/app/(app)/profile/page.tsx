@@ -17,6 +17,7 @@ import {
     Hash,
     RefreshCw,
     ArrowRight,
+    User,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -371,6 +372,17 @@ export default function ProfilePage() {
             {/* Header / User Profile */}
             <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6 border-b border-white/5 pb-8">
                 <div className="flex flex-col md:flex-row items-center gap-6">
+                    {user?.photoURL ? (
+                        <img 
+                            src={user.photoURL} 
+                            alt={user.name || "User Profile"} 
+                            className="w-16 h-16 rounded-full border border-white/10 shadow-lg object-cover"
+                        />
+                    ) : (
+                        <div className="w-16 h-16 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shadow-lg">
+                            <User size={32} className="text-zinc-400" />
+                        </div>
+                    )}
                     <div className="text-center md:text-left">
                         <h1 className="text-2xl font-bold text-zinc-100">{user?.name || "User Profile"}</h1>
                         <p className="text-zinc-500 text-sm mt-0.5">{user?.email}</p>
