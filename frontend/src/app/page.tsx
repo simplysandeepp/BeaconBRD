@@ -3,16 +3,16 @@ export default function LandingPage() {
         <iframe
             src="/landing.html"
             style={{
-                position: 'fixed',
+                position: "fixed",
                 top: 0,
                 left: 0,
-                width: '100vw',
-                height: '100vh',
-                border: 'none',
+                width: "100vw",
+                height: "100vh",
+                border: "none",
                 margin: 0,
                 padding: 0,
                 zIndex: 9999,
-                display: 'block',
+                display: "block",
             }}
             title="Beacon — AI-Powered BRD Generator"
         />

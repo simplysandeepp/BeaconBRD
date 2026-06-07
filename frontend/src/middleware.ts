@@ -53,6 +53,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-    // Skip Next.js internals, static files, and API routes from middleware
+    // Skip Next.js internals, static files, API routes, and the landing page from middleware
     matcher: ['/((?!_next/static|_next/image|favicon.ico|api/).*)'],
 };
