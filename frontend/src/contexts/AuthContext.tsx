@@ -79,45 +79,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
 
+    // Log render errors
+    if (error) {
+        console.warn('[AuthProvider] Auth error:', error);
+    }
+
     // Helper: clears the server-side firebase-session cookie
     const clearSessionCookie = () =>
         fetch('/api/auth/session', { method: 'DELETE' }).catch(() => { });
 
     useEffect(() => {
-        // Subscribe to Firebase auth state — handles token refresh & persistence automatically
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-            setUser(firebaseUser);
-            setLoading(false);
-            // Keep Zustand auth store in sync
-            syncFromFirebase(
-                firebaseUser
-                    ? {
-                        uid: firebaseUser.uid,
-                        name: firebaseUser.displayName ?? firebaseUser.email ?? 'User',
-                        email: firebaseUser.email ?? '',
-                        photoURL: firebaseUser.photoURL ?? undefined,
-                    }
-                    : null
-            );
-            if (firebaseUser) {
-                // Load all boards from Firestore for this user
-                initSessions(firebaseUser.uid).catch(console.error);
-            } else {
-                // No Firebase user → ensure the session cookie is cleared
-                // so middleware does not redirect to /dashboard incorrectly
-                clearSessionCookie().then(() => {
-                    // If we are on a protected route but auth says no user, 
-                    // redirect to login immediately to stop "black dashboard" states.
-                    const isProtectedRoute = ['/dashboard', '/brd', '/settings', '/signals', '/ingestion', '/invite'].some(
-                        prefix => pathname.startsWith(prefix)
+        console.log('[AuthProvider] Initializing Firebase auth listener');
+        let unsubscribe: (() => void) | undefined;
+        try {
+            unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+                try {
+                    setUser(firebaseUser);
+                    setLoading(false);
+                    syncFromFirebase(
+                        firebaseUser
+                            ? {
+                                uid: firebaseUser.uid,
+                                name: firebaseUser.displayName ?? firebaseUser.email ?? 'User',
+                                email: firebaseUser.email ?? '',
+                                photoURL: firebaseUser.photoURL ?? undefined,
+                            }
+                            : null
                     );
-                    if (isProtectedRoute) {
-                        router.push('/');
+                    if (firebaseUser) {
+                        console.log('[AuthProvider] User authenticated:', firebaseUser.uid);
+                        initSessions(firebaseUser.uid).catch((e: Error) => console.error('[AuthProvider] initSessions error:', e));
+                    } else {
+                        console.log('[AuthProvider] No user authenticated');
+                        clearSessionCookie().then(() => {
+                            const isProtectedRoute = ['/dashboard', '/brd', '/settings', '/signals', '/ingestion', '/invite'].some(
+                                prefix => pathname.startsWith(prefix)
+                            );
+                            if (isProtectedRoute) {
+                                router.push('/');
+                            }
+                        }).catch((e: Error) => console.error('[AuthProvider] clearSessionCookie error:', e));
                     }
-                });
+                } catch (innerErr) {
+                    console.error('[AuthProvider] Auth state change handler error:', innerErr);
+                    setLoading(false);
+                }
+            });
+        } catch (err) {
+            console.error('[AuthProvider] Firebase auth init error:', err);
+            setLoading(false);
+        }
+        return () => {
+            if (unsubscribe) {
+                try {
+                    unsubscribe();
+                } catch (e) {
+                    console.error('[AuthProvider] Unsubscribe error:', e);
+                }
             }
-        });
-        return unsubscribe; // cleanup on unmount
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [syncFromFirebase, initSessions, pathname, router]);
 
