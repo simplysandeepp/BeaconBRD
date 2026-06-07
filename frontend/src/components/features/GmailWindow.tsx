@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { 
     getGmailStatus, getGmailProfile, 
     getGmailThreadFull, getGmailAttachment, getGmailOAuthUrl,
-    listGmailEmails, type GmailEmail, type GmailSearchOptions,
+    listGmailEmails, getGmailCachedEmails, type GmailEmail, type GmailSearchOptions,
     type GmailProfile, type GmailThread
 } from '@/lib/apiClient';
 import { getGmailCache, setGmailCache } from '@/lib/gmailCache';
@@ -25,10 +25,29 @@ interface GmailReplicaProps {
 export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailReplicaProps) {
     const [emails, setEmails] = useState<GmailEmail[]>([]);
     const [loading, setLoading] = useState(false);
+    const [showSpinner, setShowSpinner] = useState(false);
+
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (loading) {
+            timer = setTimeout(() => {
+                setShowSpinner(true);
+            }, 250);
+        } else {
+            setShowSpinner(false);
+        }
+        return () => clearTimeout(timer);
+    }, [loading]);
+
     const [error, setError] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [activeFolder, setActiveFolder] = useState('INBOX');
     const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageTokenHistory, setPageTokenHistory] = useState<(string | null)[]>([null]); // index 0 = page 1 (no token)
+    const [initialCacheLoaded, setInitialCacheLoaded] = useState(false);
     
     // Auth & Profile
     const [status, setStatus] = useState<{connected: boolean, available: boolean} | null>(null);
@@ -60,7 +79,9 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
         }
     }, []);
 
-    const fetchEmails = useCallback(async (options: GmailSearchOptions & { forceRefresh?: boolean } = {}, append = false) => {
+    const PAGE_SIZE = 20;
+
+    const fetchEmails = useCallback(async (options: GmailSearchOptions & { forceRefresh?: boolean } = {}) => {
         setLoading(true);
         setError(null);
         try {
@@ -86,8 +107,8 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
 
             const cacheKey = qParts.length > 0 ? qParts.join(' ') : `folder:${activeFolder}`;
 
-            // 1. Check Cache before hitting API
-            if (!append && !options.pageToken && !options.forceRefresh) {
+            // Check frontend cache for page 1 (no pageToken, no forceRefresh)
+            if (!options.pageToken && !options.forceRefresh) {
                 const cached = getGmailCache(cacheKey);
                 if (cached) {
                     setEmails(cached.emails);
@@ -98,16 +119,17 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
             }
 
             const res = await listGmailEmails({ 
-                count: 10, 
+                count: PAGE_SIZE, 
                 ...options,
+                bypassCache: options.bypassCache || options.forceRefresh,
                 q: qParts.length > 0 ? qParts.join(' ') : undefined
             });
 
-            setEmails(prev => append ? [...prev, ...res.emails] : res.emails);
+            setEmails(res.emails);
             setNextPageToken(res.next_page_token || null);
 
-            // 2. Save into Cache
-            if (!append && !options.pageToken) {
+            // Cache page 1 results (no pageToken means first page)
+            if (!options.pageToken) {
                 setGmailCache(cacheKey, {
                     emails: res.emails,
                     nextPageToken: res.next_page_token || null
@@ -123,9 +145,49 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
         }
     }, [searchQuery, activeFolder, fromMail, toMail]);
 
+    // Navigate to next page
+    const goNextPage = useCallback(() => {
+        if (!nextPageToken) return;
+        // Save current token to history so we can go back
+        setPageTokenHistory(prev => {
+            const updated = [...prev];
+            // Ensure we have a slot for the next page
+            if (updated.length <= currentPage) {
+                updated.push(nextPageToken);
+            } else {
+                updated[currentPage] = nextPageToken;
+            }
+            return updated;
+        });
+        setCurrentPage(prev => prev + 1);
+        fetchEmails({ pageToken: nextPageToken });
+    }, [nextPageToken, currentPage, fetchEmails]);
+
+    // Navigate to previous page
+    const goPrevPage = useCallback(() => {
+        if (currentPage <= 1) return;
+        const prevPage = currentPage - 1;
+        const prevToken = pageTokenHistory[prevPage - 1] || undefined; // page 1 has no token
+        setCurrentPage(prevPage);
+        if (prevToken) {
+            fetchEmails({ pageToken: prevToken });
+        } else {
+            // Page 1 — fetch without token
+            fetchEmails({});
+        }
+    }, [currentPage, pageTokenHistory, fetchEmails]);
+
+    // Reset pagination when folder/search changes
+    const resetPagination = useCallback(() => {
+        setCurrentPage(1);
+        setPageTokenHistory([null]);
+    }, []);
+
+    // Debounced search by from/to
     useEffect(() => {
         const timer = setTimeout(() => {
             if (status?.connected) {
+                resetPagination();
                 fetchEmails();
             }
         }, 500); // 500ms debounce
@@ -136,15 +198,33 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
         fetchStatus();
     }, [fetchStatus]);
 
+    // On connect: load cached emails instantly, then full page
     useEffect(() => {
-        if (status?.connected) {
+        if (!status?.connected) return;
+        if (initialCacheLoaded) {
+            // Already loaded cache once, just do a normal fetch on folder change
+            resetPagination();
             fetchEmails();
+            return;
         }
-    }, [fetchEmails, status?.connected, activeFolder]); // activeFolder change triggers immediately
+        // First load: try backend cache for instant display
+        setInitialCacheLoaded(true);
+        (async () => {
+            // 1. Show cached emails instantly
+            const cached = await getGmailCachedEmails();
+            if (cached.cached && cached.emails.length > 0) {
+                setEmails(cached.emails);
+                setNextPageToken(cached.next_page_token || null);
+            }
+            // 2. Fetch full page (20 emails) in parallel
+            fetchEmails({ forceRefresh: true });
+        })();
+    }, [status?.connected, activeFolder]); // activeFolder change triggers
 
     const handleSearch = (e?: React.FormEvent) => {
         e?.preventDefault();
-        fetchEmails();
+        resetPagination();
+        fetchEmails({ forceRefresh: true });
     };
 
     const toggleSelection = (id: string) => {
@@ -377,7 +457,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                             return (
                                 <button 
                                     key={folder.id}
-                                    onClick={() => { setActiveFolder(folder.id); setViewMode('list'); setSearchQuery(''); }}
+                                    onClick={() => { setActiveFolder(folder.id); setViewMode('list'); setSearchQuery(''); resetPagination(); }}
                                     className={cn(
                                         "w-full flex items-center gap-4 px-3 py-2 rounded-lg transition-all border",
                                         isActive 
@@ -401,17 +481,23 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                 <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20">
                     <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between">
                         <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono">
-                            <span className="mr-2">1 - {emails.length} of 100+</span>
+                            <span className="mr-2">
+                                {emails.length > 0
+                                    ? `${(currentPage - 1) * PAGE_SIZE + 1} – ${(currentPage - 1) * PAGE_SIZE + emails.length}`
+                                    : 'No emails'}
+                            </span>
+                            <span className="text-zinc-700">Page {currentPage}</span>
                             <div className="flex items-center gap-1 border-l border-white/10 pl-3">
                                 <button 
-                                    onClick={() => fetchEmails({ pageToken: undefined })} // Simple reset for now or handle prev logic
+                                    onClick={goPrevPage}
+                                    disabled={currentPage <= 1}
                                     className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-500 transition-colors disabled:opacity-30"
                                     title="Previous Page"
                                 >
                                     <motion.div whileHover={{ x: -2 }}><ChevronDown size={16} className="rotate-90" /></motion.div>
                                 </button>
                                 <button 
-                                    onClick={() => nextPageToken && fetchEmails({ pageToken: nextPageToken })}
+                                    onClick={goNextPage}
                                     disabled={!nextPageToken}
                                     className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-500 transition-colors disabled:opacity-30"
                                     title="Next Page"
@@ -492,10 +578,14 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                     </div>
                                 </motion.div>
                             ) : loading ? (
-                                <div key="loading" className="h-full flex flex-col items-center justify-center text-zinc-600 animate-in fade-in duration-500">
-                                    <Loader2 size={40} className="animate-spin mb-4 opacity-20" />
-                                    <p className="text-xs font-mono uppercase tracking-[0.2em]">Synchronizing Emails...</p>
-                                </div>
+                                showSpinner ? (
+                                    <div key="loading" className="h-full flex flex-col items-center justify-center text-zinc-600 animate-in fade-in duration-500">
+                                        <Loader2 size={40} className="animate-spin mb-4 opacity-20" />
+                                        <p className="text-xs font-mono uppercase tracking-[0.2em]">Synchronizing Emails...</p>
+                                    </div>
+                                ) : (
+                                    <div key="preloading" className="h-full" />
+                                )
                             ) : error ? (
                                 <div key="error" className="h-full flex flex-col items-center justify-center p-10 text-center">
                                     <div className="w-16 h-16 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6">
@@ -529,7 +619,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                             )}
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                openThread(email.message_id);
+                                                openThread(email.thread_id || email.message_id);
                                             }}
                                         >
                                             <div className="flex-shrink-0 flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
@@ -571,18 +661,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                         </motion.div>
                                     ))}
                                     
-                                    {nextPageToken && (
-                                        <div className="p-6 flex justify-center">
-                                            <button 
-                                                onClick={() => fetchEmails({ pageToken: nextPageToken }, true)}
-                                                disabled={loading}
-                                                className="px-8 py-2 bg-white/5 border border-white/10 rounded-xl text-zinc-400 text-xs font-bold hover:bg-white/10 transition-all flex items-center gap-2"
-                                            >
-                                                {loading ? <Loader2 size={14} className="animate-spin" /> : <ChevronDown size={14} />}
-                                                Load More
-                                            </button>
-                                        </div>
-                                    )}
+
                                 </div>
                             )}
                         </AnimatePresence>

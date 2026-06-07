@@ -178,6 +178,7 @@ export interface GmailEmail {
     body: string;
     snippet: string;
     message_id: string;
+    thread_id?: string;
     attachments: any[];
 }
 
@@ -561,6 +562,7 @@ export interface GmailSearchOptions {
     content?: string;
     hasAttachments?: boolean;
     pageToken?: string;
+    bypassCache?: boolean;
 }
 
 export async function listGmailEmails(options: GmailSearchOptions = {}): Promise<{ count: number; emails: GmailEmail[]; query_used?: string; next_page_token?: string }> {
@@ -572,12 +574,21 @@ export async function listGmailEmails(options: GmailSearchOptions = {}): Promise
     if (options.content) params.append("content_search", options.content);
     if (options.hasAttachments) params.append("has_attachments", "true");
     if (options.pageToken) params.append("page_token", options.pageToken);
+    if (options.bypassCache) params.append("bypass_cache", "true");
 
     const query = params.toString();
     return apiFetchWithFallback<{ count: number; emails: GmailEmail[]; query_used?: string; next_page_token?: string }>(
         `/integrations/gmail/check${query ? `?${query}` : ""}`,
         `/gmail/check${query ? `?${query}` : ""}`
     );
+}
+
+export async function getGmailCachedEmails(): Promise<{ count: number; emails: GmailEmail[]; next_page_token?: string; cached: boolean }> {
+    try {
+        return await apiFetch<{ count: number; emails: GmailEmail[]; next_page_token?: string; cached: boolean }>("/integrations/gmail/check/cached");
+    } catch {
+        return { count: 0, emails: [], cached: false };
+    }
 }
 
 export async function ingestGmailEmails(

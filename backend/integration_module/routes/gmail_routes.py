@@ -3,6 +3,8 @@ import re
 import sys
 import secrets
 import time
+import threading
+import hashlib
 from typing import List
 from urllib.parse import quote
 
@@ -339,6 +341,158 @@ def gmail_attachment(message_id: str, attachment_id: str, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ── Page-level and Message-level cache with background prefetch ────────
+_gmail_email_cache: dict = {}  # uid -> { msg_id: { "email": dict, "timestamp": float } }
+_gmail_page_cache: dict = {}   # uid -> { cache_key -> { "message_ids": List[str], "next_page_token": str | None, "timestamp": float } }
+_GMAIL_CACHE_TTL = 5 * 60  # 5 minutes
+_prefetch_locks: dict = {}  # uid -> threading.Lock  (prevents duplicate prefetches)
+
+def _cache_key_for(query_string: str | None, page_token: str | None, count: int) -> str:
+    """Build a stable cache key from query + page token + count."""
+    raw = f"{query_string or ''}|{page_token or ''}|{count}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+def _get_cached_email_details(uid: str, msg_ids: List[str]) -> dict:
+    """Check _gmail_email_cache for existing, valid messages. Return dict of msg_id -> email_details."""
+    if not uid or uid not in _gmail_email_cache:
+        return {}
+    
+    user_cache = _gmail_email_cache[uid]
+    now = time.time()
+    valid_emails = {}
+    for msg_id in msg_ids:
+        entry = user_cache.get(msg_id)
+        if entry:
+            if now - entry.get("timestamp", 0) <= _GMAIL_CACHE_TTL:
+                valid_emails[msg_id] = entry["email"]
+            else:
+                user_cache.pop(msg_id, None)  # Evict expired
+    return valid_emails
+
+def _set_cached_email_details(uid: str, emails: List[dict]):
+    """Store email details in _gmail_email_cache."""
+    if not uid or not emails:
+        return
+    if uid not in _gmail_email_cache:
+        _gmail_email_cache[uid] = {}
+    
+    now = time.time()
+    for email in emails:
+        msg_id = email.get("message_id")
+        if msg_id:
+            _gmail_email_cache[uid][msg_id] = {
+                "email": email,
+                "timestamp": now
+            }
+
+def _get_page_cache(uid: str, cache_key: str):
+    """Return cached page data if valid, else None."""
+    if not uid or uid not in _gmail_page_cache:
+        return None
+    entry = _gmail_page_cache[uid].get(cache_key)
+    if not entry:
+        return None
+    if time.time() - entry.get("timestamp", 0) > _GMAIL_CACHE_TTL:
+        _gmail_page_cache[uid].pop(cache_key, None)
+        return None
+    return entry
+
+def _set_page_cache(uid: str, cache_key: str, message_ids: List[str], next_page_token: str | None):
+    """Store page metadata in the cache."""
+    if not uid:
+        return
+    if uid not in _gmail_page_cache:
+        _gmail_page_cache[uid] = {}
+    _gmail_page_cache[uid][cache_key] = {
+        "message_ids": message_ids,
+        "next_page_token": next_page_token,
+        "timestamp": time.time()
+    }
+
+def _prefetch_next_page(
+    uid: str,
+    creds_data: dict,
+    query_string: str | None,
+    next_page_token: str,
+    count: int
+):
+    """Background worker: fetch the next page and cache it."""
+    lock = _prefetch_locks.setdefault(uid, threading.Lock())
+    if not lock.acquire(blocking=False):
+        return  # Another prefetch is already running for this user
+    try:
+        creds = Credentials(**creds_data)
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                creds.refresh(AuthRequest())
+            else:
+                return
+        service = gmail.get_gmail_service(creds)
+        list_kwargs = {"userId": "me", "maxResults": count}
+        if query_string:
+            list_kwargs["q"] = query_string
+        list_kwargs["pageToken"] = next_page_token
+
+        results = gmail.execute_with_retry(service.users().messages().list(**list_kwargs))
+        messages = results.get("messages", [])
+        npt = results.get("nextPageToken", None)
+
+        if messages:
+            msg_ids = [m["id"] for m in messages]
+            cached_emails = _get_cached_email_details(uid, msg_ids)
+            missing_ids = [mid for mid in msg_ids if mid not in cached_emails]
+            
+            if missing_ids:
+                new_emails = gmail.batch_get_email_details(service, missing_ids)
+                _set_cached_email_details(uid, new_emails)
+            
+            ck = _cache_key_for(query_string, next_page_token, count)
+            _set_page_cache(uid, ck, msg_ids, npt)
+    except Exception as e:
+        print(f"[prefetch] error for uid={uid}: {e}")
+    finally:
+        lock.release()
+
+
+@router.get("/check/cached")
+def gmail_check_cached(request: Request):
+    """Return cached first-page inbox emails for instant loading. Returns empty if cache miss."""
+    uid = _get_uid_from_request(request)
+    _check_rate_limit(uid, max_requests=40)
+
+    # Look up default inbox first-page cache.
+    # We check if we have a cache entry for count=20 first, and if not, check count=10.
+    cached = None
+    if uid:
+        key_20 = _cache_key_for(None, None, 20)
+        cached = _get_page_cache(uid, key_20)
+        if not cached:
+            key_10 = _cache_key_for(None, None, 10)
+            cached = _get_page_cache(uid, key_10)
+
+    if not cached:
+        return {"count": 0, "emails": [], "next_page_token": None, "cached": False}
+
+    msg_ids = cached["message_ids"]
+    cached_emails_dict = _get_cached_email_details(uid, msg_ids) if uid else {}
+    
+    # We want to return whatever cached email details we have (even if it's a subset)
+    emails = []
+    for mid in msg_ids:
+        if mid in cached_emails_dict:
+            emails.append(cached_emails_dict[mid])
+            
+    if not emails:
+        return {"count": 0, "emails": [], "next_page_token": None, "cached": False}
+
+    return {
+        "count": len(emails),
+        "emails": emails,
+        "next_page_token": cached.get("next_page_token"),
+        "cached": True
+    }
+
+
 @router.get("/check")
 def gmail_check(
     request: Request,
@@ -347,7 +501,9 @@ def gmail_check(
     from_mail: str = Query(default=None),
     to_mail: str = Query(default=None),
     content_search: str = Query(default=None),
-    has_attachments: bool = Query(default=None)
+    has_attachments: bool = Query(default=None),
+    page_token: str = Query(default=None),
+    bypass_cache: bool = Query(default=False)
 ):
     uid = _get_uid_from_request(request)
     _check_rate_limit(uid, max_requests=20)  # Search queries rate limit
@@ -363,27 +519,89 @@ def gmail_check(
     
     query_string = " ".join(parts) if parts else None
     
+    # ── Check page cache first ─────────────────────────────────────
+    ck = _cache_key_for(query_string, page_token, count)
+    
+    if not bypass_cache:
+        cached_page = _get_page_cache(uid, ck) if uid else None
+        if cached_page:
+            msg_ids = cached_page["message_ids"]
+            cached_emails_dict = _get_cached_email_details(uid, msg_ids)
+            # Check if we have all email details cached
+            if len(cached_emails_dict) == len(msg_ids):
+                # Reconstruct emails in original order
+                emails = [cached_emails_dict[mid] for mid in msg_ids]
+                return {
+                    "count": len(emails),
+                    "emails": emails,
+                    "query_used": query_string,
+                    "next_page_token": cached_page.get("next_page_token"),
+                    "prefetched": True
+                }
+    
     try:
         service = gmail.get_gmail_service(credentials)
         list_kwargs = {"userId": "me", "maxResults": count}
         if query_string:
             list_kwargs["q"] = query_string
+        if page_token:
+            list_kwargs["pageToken"] = page_token
             
         results = gmail.execute_with_retry(service.users().messages().list(**list_kwargs))
         messages = results.get("messages", [])
+        next_page_token = results.get("nextPageToken", None)
         
         if not messages:
-            return {"count": 0, "emails": []}
+            # Cache empty result too so we don't re-fetch
+            if uid:
+                _set_page_cache(uid, ck, [], None)
+            return {"count": 0, "emails": [], "next_page_token": None}
         
+        msg_ids = [m["id"] for m in messages]
+        
+        # Check what is already in individual cache
+        cached_emails_dict = {}
+        if uid and not bypass_cache:
+            cached_emails_dict = _get_cached_email_details(uid, msg_ids)
+            
+        missing_ids = [mid for mid in msg_ids if mid not in cached_emails_dict]
+        
+        new_emails = []
+        if missing_ids:
+            new_emails = gmail.batch_get_email_details(service, missing_ids)
+            if uid:
+                _set_cached_email_details(uid, new_emails)
+        
+        # Merge cached and new email details, maintaining order of msg_ids
         emails = []
-        for msg in messages:
-            email_data = gmail.get_email_details(service, msg["id"])
-            emails.append(email_data)
+        for mid in msg_ids:
+            if mid in cached_emails_dict:
+                emails.append(cached_emails_dict[mid])
+            else:
+                match = next((e for e in new_emails if e["message_id"] == mid), None)
+                if match:
+                    emails.append(match)
+        
+        # Cache this page metadata
+        if uid:
+            _set_page_cache(uid, ck, msg_ids, next_page_token)
+        
+        # ── Background prefetch next page ──────────────────────────
+        if uid and next_page_token and not bypass_cache:
+            creds_data = user_credentials.get(uid)
+            if creds_data:
+                t = threading.Thread(
+                    target=_prefetch_next_page,
+                    args=(uid, dict(creds_data), query_string, next_page_token, count),
+                    daemon=True
+                )
+                t.start()
             
         return {
             "count": len(emails),
             "emails": emails,
-            "query_used": query_string
+            "query_used": query_string,
+            "next_page_token": next_page_token
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

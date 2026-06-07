@@ -225,7 +225,7 @@ export default function IngestionPage() {
                 if (cached && !fetchEmails) {
                     setGmailEmails(cached.emails);
                 } else if (fetchEmails) {
-                    const res = await listGmailEmails({ count: 10 });
+                    const res = await listGmailEmails({ count: 10, bypassCache: true });
                     setGmailEmails(res.emails);
                     setGmailCache('folder:INBOX', { emails: res.emails, nextPageToken: res.next_page_token || null });
                 }

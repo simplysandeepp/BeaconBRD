@@ -81,6 +81,7 @@ def get_email_details(service, msg_id):
         "body": body.strip(),
         "snippet": msg.get("snippet", ""),
         "message_id": msg_id,
+        "thread_id": msg.get("threadId"),
         "attachments": attachments
     }
 
@@ -106,6 +107,73 @@ def download_attachment(service, message_id, attachment_id):
         userId="me", messageId=message_id, id=attachment_id
     ))
     return base64.urlsafe_b64decode(attachment.get("data").encode("UTF-8"))
+
+def batch_get_email_details(service, msg_ids):
+    """Fetch multiple email details in a single batch HTTP request.
+    
+    Uses the Gmail API's batch endpoint to collapse N sequential
+    messages.get() calls into 1 HTTP round-trip (up to 100 per batch).
+    Falls back to sequential fetching on batch failure.
+    """
+    if not msg_ids:
+        return []
+
+    results = {}
+    errors = {}
+
+    def _callback(request_id, response, exception):
+        if exception is not None:
+            errors[request_id] = exception
+        else:
+            results[request_id] = response
+
+    try:
+        batch = service.new_batch_http_request(callback=_callback)
+        for msg_id in msg_ids:
+            batch.add(
+                service.users().messages().get(userId="me", id=msg_id),
+                request_id=msg_id
+            )
+        batch.execute()
+    except Exception:
+        # Batch call itself failed — fall back to sequential
+        return [get_email_details(service, mid) for mid in msg_ids]
+
+    emails = []
+    for msg_id in msg_ids:
+        if msg_id in errors:
+            # Skip messages that failed individually within the batch
+            continue
+        msg = results.get(msg_id)
+        if not msg:
+            continue
+        headers = msg.get("payload", {}).get("headers", [])
+        subject = "No Subject"
+        sender = "Unknown"
+        for header in headers:
+            if header["name"].lower() == "subject":
+                subject = header["value"]
+            if header["name"].lower() == "from":
+                sender = header["value"]
+
+        body = get_body(msg.get("payload", {}))
+        body = body.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        body = re.sub(r'\s+', ' ', body).strip()
+
+        attachments = get_attachments(msg.get("payload", {}))
+
+        emails.append({
+            "subject": subject,
+            "from": sender,
+            "body": body.strip(),
+            "snippet": msg.get("snippet", ""),
+            "message_id": msg_id,
+            "thread_id": msg.get("threadId"),
+            "attachments": attachments
+        })
+
+    return emails
+
 
 def get_gmail_service(credentials):
     """Initialize and return the Gmail API service."""
