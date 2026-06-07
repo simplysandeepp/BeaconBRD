@@ -180,6 +180,7 @@ export interface GmailEmail {
     message_id: string;
     thread_id?: string;
     attachments: any[];
+    labelIds?: string[];
 }
 
 export interface GmailProfile {

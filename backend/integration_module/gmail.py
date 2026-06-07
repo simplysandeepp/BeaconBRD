@@ -82,7 +82,8 @@ def get_email_details(service, msg_id):
         "snippet": msg.get("snippet", ""),
         "message_id": msg_id,
         "thread_id": msg.get("threadId"),
-        "attachments": attachments
+        "attachments": attachments,
+        "labelIds": msg.get("labelIds", [])
     }
 
 def get_attachments(payload):
@@ -169,7 +170,8 @@ def batch_get_email_details(service, msg_ids):
             "snippet": msg.get("snippet", ""),
             "message_id": msg_id,
             "thread_id": msg.get("threadId"),
-            "attachments": attachments
+            "attachments": attachments,
+            "labelIds": msg.get("labelIds", [])
         })
 
     return emails

@@ -61,18 +61,35 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
     // Search states
     const [showFilters, setShowFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [fromMail, setFromMail] = useState('');
-    const [toMail, setToMail] = useState('');
+    const [fromMails, setFromMails] = useState<string[]>([]);
+    const [toMails, setToMails] = useState<string[]>([]);
+    const [fromInput, setFromInput] = useState('');
+    const [toInput, setToInput] = useState('');
     const [includeAttachments, setIncludeAttachments] = useState(true);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
     const fetchStatus = useCallback(async () => {
         try {
             const s = await getGmailStatus();
             setStatus(s);
             if (s.connected) {
-                const p = await getGmailProfile();
-                setProfile(p);
+                const cachedProfileStr = localStorage.getItem('gmail_profile');
+                if (cachedProfileStr) {
+                    try {
+                        setProfile(JSON.parse(cachedProfileStr));
+                    } catch (e) {
+                        const p = await getGmailProfile();
+                        setProfile(p);
+                        localStorage.setItem('gmail_profile', JSON.stringify(p));
+                    }
+                } else {
+                    const p = await getGmailProfile();
+                    setProfile(p);
+                    localStorage.setItem('gmail_profile', JSON.stringify(p));
+                }
+            } else {
+                localStorage.removeItem('gmail_profile');
+                setProfile(null);
             }
         } catch (e) {
             console.error("Failed to fetch Gmail status:", e);
@@ -93,8 +110,8 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                 qParts.push(searchQuery);
             }
 
-            const finalFrom = options.from !== undefined ? options.from : fromMail;
-            const finalTo = options.to !== undefined ? options.to : toMail;
+            const finalFrom = options.from !== undefined ? options.from : (fromMails.length > 0 ? (fromMails.length === 1 ? fromMails[0] : `(${fromMails.join(' OR ')})`) : '');
+            const finalTo = options.to !== undefined ? options.to : (toMails.length > 0 ? (toMails.length === 1 ? toMails[0] : `(${toMails.join(' OR ')})`) : '');
             
             if (finalFrom) qParts.push(`from:${finalFrom}`);
             if (finalTo) qParts.push(`to:${finalTo}`);
@@ -143,7 +160,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
         } finally {
             setLoading(false);
         }
-    }, [searchQuery, activeFolder, fromMail, toMail]);
+    }, [searchQuery, activeFolder, fromMails, toMails]);
 
     // Navigate to next page
     const goNextPage = useCallback(() => {
@@ -183,20 +200,22 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
         setPageTokenHistory([null]);
     }, []);
 
-    // Debounced search by from/to
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (status?.connected) {
-                resetPagination();
-                fetchEmails();
-            }
-        }, 500); // 500ms debounce
-        return () => clearTimeout(timer);
-    }, [fromMail, toMail, fetchEmails, status?.connected]);
+    // Removed debounced search as requested by user.
+    // Search now only triggers via explicit submit (pressing the search icon).
 
     useEffect(() => {
         fetchStatus();
     }, [fetchStatus]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
 
     // On connect: load cached emails instantly, then full page
     useEffect(() => {
@@ -341,13 +360,14 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
             {/* Header / Search Bar Area */}
             <div className="flex items-center gap-4 px-6 py-4 border-b border-white/5 bg-white/5">
                 <div className="flex items-center gap-2">
-                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-zinc-400 transition-colors">
-                        <ArrowLeft size={20} />
+                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-zinc-400 transition-colors" title="Close">
+                        <X size={20} />
                     </button>
                 </div>
                 
                 <div className="flex-1 flex items-center gap-3">
-                    <div className="flex-1 relative flex items-center">
+                    {/* Increased search bar size */}
+                    <div className="w-96 relative flex items-center">
                         <form onSubmit={handleSearch} className="flex-1 flex items-center bg-zinc-950/40 border border-white/10 rounded-xl px-4 py-2 hover:border-white/20 focus-within:border-cyan-500/50 focus-within:bg-zinc-950/60 transition-all">
                             <Search size={18} className="text-zinc-500 mr-3" />
                             <input 
@@ -357,31 +377,126 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="bg-transparent border-none focus:outline-none text-sm text-zinc-100 w-full placeholder-zinc-600"
                             />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery('')}
+                                    className="p-1 hover:bg-white/10 rounded-full text-zinc-400 hover:text-zinc-200 transition-colors ml-2"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
                         </form>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-1.5 gap-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/10 pr-2">From</label>
-                            <input 
-                                type="text" 
-                                value={fromMail} 
-                                onChange={e => setFromMail(e.target.value)}
-                                placeholder="sender"
-                                className="bg-transparent border-none focus:outline-none text-[11px] text-zinc-100 w-24 placeholder-zinc-700 font-mono"
-                            />
+                    {/* Bigger from and to forms */}
+                    <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2">
+                        {/* FROM Input Box */}
+                        <div className="flex-1 flex items-center flex-wrap bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-1.5 gap-1.5 focus-within:border-cyan-500/50 hover:border-white/20 transition-all min-h-[38px]">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/10 pr-2 mr-1">From</span>
+                            <div className="flex flex-wrap gap-1.5 items-center flex-1">
+                                {fromMails.map((mail, idx) => (
+                                    <span key={idx} className="flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 px-2.5 py-1 rounded-md text-[11px] font-mono">
+                                        {mail}
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setFromMails(prev => prev.filter((_, i) => i !== idx))}
+                                            className="hover:bg-cyan-500/20 rounded-full p-0.5 transition-colors"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    </span>
+                                ))}
+                                <input 
+                                    type="text" 
+                                    value={fromInput} 
+                                    onChange={e => setFromInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+                                            e.preventDefault();
+                                            const val = fromInput.trim().replace(/,$/, '');
+                                            if (val) {
+                                                if (!fromMails.includes(val)) {
+                                                    setFromMails(prev => [...prev, val]);
+                                                }
+                                                setFromInput('');
+                                            } else if (e.key === 'Enter') {
+                                                handleSearch();
+                                            }
+                                        } else if (e.key === 'Backspace' && !fromInput && fromMails.length > 0) {
+                                            setFromMails(prev => prev.slice(0, -1));
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        const val = fromInput.trim();
+                                        if (val) {
+                                            if (!fromMails.includes(val)) {
+                                                setFromMails(prev => [...prev, val]);
+                                            }
+                                            setFromInput('');
+                                        }
+                                    }}
+                                    placeholder={fromMails.length === 0 ? "user@gmail.com" : ""}
+                                    className="bg-transparent border-none focus:outline-none text-[11px] text-zinc-100 min-w-[80px] flex-1 placeholder-zinc-700 font-mono"
+                                />
+                            </div>
                         </div>
-                        <div className="flex items-center bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-1.5 gap-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/10 pr-2">To</label>
-                            <input 
-                                type="text" 
-                                value={toMail} 
-                                onChange={e => setToMail(e.target.value)}
-                                placeholder="recipient"
-                                className="bg-transparent border-none focus:outline-none text-[11px] text-zinc-100 w-24 placeholder-zinc-700 font-mono"
-                            />
+
+                        {/* TO Input Box */}
+                        <div className="flex-1 flex items-center flex-wrap bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-1.5 gap-1.5 focus-within:border-cyan-500/50 hover:border-white/20 transition-all min-h-[38px]">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/10 pr-2 mr-1">To</span>
+                            <div className="flex flex-wrap gap-1.5 items-center flex-1">
+                                {toMails.map((mail, idx) => (
+                                    <span key={idx} className="flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 px-2.5 py-1 rounded-md text-[11px] font-mono">
+                                        {mail}
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setToMails(prev => prev.filter((_, i) => i !== idx))}
+                                            className="hover:bg-cyan-500/20 rounded-full p-0.5 transition-colors"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    </span>
+                                ))}
+                                <input 
+                                    type="text" 
+                                    value={toInput} 
+                                    onChange={e => setToInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+                                            e.preventDefault();
+                                            const val = toInput.trim().replace(/,$/, '');
+                                            if (val) {
+                                                if (!toMails.includes(val)) {
+                                                    setToMails(prev => [...prev, val]);
+                                                }
+                                                setToInput('');
+                                            } else if (e.key === 'Enter') {
+                                                handleSearch();
+                                            }
+                                        } else if (e.key === 'Backspace' && !toInput && toMails.length > 0) {
+                                            setToMails(prev => prev.slice(0, -1));
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        const val = toInput.trim();
+                                        if (val) {
+                                            if (!toMails.includes(val)) {
+                                                setToMails(prev => [...prev, val]);
+                                            }
+                                            setToInput('');
+                                        }
+                                    }}
+                                    placeholder={toMails.length === 0 ? "recipient" : ""}
+                                    className="bg-transparent border-none focus:outline-none text-[11px] text-zinc-100 min-w-[80px] flex-1 placeholder-zinc-700 font-mono"
+                                />
+                            </div>
                         </div>
-                    </div>
+
+                        <button type="submit" title="Search Users" className="p-2.5 bg-cyan-500/10 hover:bg-cyan-500/30 border border-cyan-500/20 rounded-lg text-cyan-400 transition-all flex items-center justify-center self-stretch">
+                            <Search size={16} />
+                        </button>
+                    </form>
                 </div>
 
                 <div className="flex items-center gap-3 ml-4">
@@ -389,22 +504,10 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                         onClick={() => status?.connected ? fetchEmails({ forceRefresh: true }) : fetchStatus()} 
                         disabled={loading}
                         className="p-2 hover:bg-white/10 rounded-full text-zinc-400 transition-colors disabled:opacity-30"
+                        title="Sync Emails"
                     >
                         <RefreshCcw size={18} className={cn(loading && "animate-spin")} />
                     </button>
-                    {profile ? (
-                        <div className="flex items-center gap-3 pl-2 border-l border-white/10">
-                        <div className="flex-col items-end hidden sm:flex">
-                                <span className="text-[11px] font-bold text-zinc-200 leading-none">{profile.name}</span>
-                                <span className="text-[9px] text-zinc-500 leading-none mt-1">{profile.email}</span>
-                            </div>
-                            <img src={profile.picture} alt={profile.name} className="w-8 h-8 rounded-full border border-white/10" />
-                        </div>
-                    ) : (
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-400/20 to-purple-400/20 border border-white/10 flex items-center justify-center">
-                            <Mail size={18} className="text-cyan-400" />
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -474,6 +577,36 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                         })}
 
 
+                    </div>
+
+                    {/* Bottom Profile Area */}
+                    <div className="p-4 border-t border-white/5 bg-zinc-950/40 flex items-center gap-3 mt-auto">
+                        {profile ? (
+                            <>
+                                <img 
+                                    src={profile.picture} 
+                                    alt={profile.name} 
+                                    className={cn("rounded-full border border-white/10 flex-shrink-0 transition-all", sidebarCollapsed ? "w-8 h-8" : "w-10 h-10")} 
+                                />
+                                {!sidebarCollapsed && (
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="text-xs font-bold text-zinc-200 leading-none truncate">{profile.name}</span>
+                                        <span className="text-[10px] text-zinc-500 leading-none mt-1.5 truncate">{profile.email}</span>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                <div className={cn("rounded-full bg-gradient-to-tr from-cyan-400/20 to-purple-400/20 border border-white/10 flex items-center justify-center flex-shrink-0 transition-all", sidebarCollapsed ? "w-8 h-8" : "w-10 h-10")}>
+                                    <Mail size={sidebarCollapsed ? 14 : 18} className="text-cyan-400" />
+                                </div>
+                                {!sidebarCollapsed && (
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-zinc-200 leading-none">Gmail disconnected</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 </motion.div>
 
@@ -606,7 +739,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                     <p className="text-sm text-zinc-500 font-medium">No emails found matching your criteria</p>
                                 </div>
                             ) : (
-                                <div key="list" className="divide-y divide-white/5">
+                                <div key="list" className="divide-y divide-white/5 pb-28">
                                     {emails.map((email) => (
                                         <motion.div 
                                             key={email.message_id}
@@ -652,11 +785,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                             </div>
 
                                             <div className="w-20 text-right flex-shrink-0">
-                                                <p className="text-[10px] text-zinc-600 font-mono group-hover:hidden truncate">Recent</p>
-                                                <div className="hidden group-hover:flex items-center justify-end gap-1">
-                                                    <button className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-500"><Clock size={14} /></button>
-                                                    <button className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-500"><Trash2 size={14} /></button>
-                                                </div>
+                                                <p className="text-[10px] text-zinc-600 font-mono truncate">Recent</p>
                                             </div>
                                         </motion.div>
                                     ))}
