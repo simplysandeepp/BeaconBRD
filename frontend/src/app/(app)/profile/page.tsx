@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { GmailLogo } from "@/components/icons/GmailLogo";
+import { SlackLogo } from "@/components/icons/SlackLogo";
 
 import { useAuthStore } from "@/store/useAuthStore";
 import { useIntegrationStore } from "@/store/useIntegrationStore";
@@ -36,6 +38,7 @@ import {
     disconnectGmail,
     listGmailEmails,
     ingestGmailEmails,
+    openGmailAuthPopup,
     type SlackChannel,
     type SlackStatus,
     type GmailEmail,
@@ -64,6 +67,31 @@ const dataSources = [
 export default function ProfilePage() {
     const searchParams = useSearchParams();
     const { user, updateUser } = useAuthStore();
+
+    useEffect(() => {
+        if (typeof window !== "undefined" && window.opener) {
+            const gmailParam = searchParams.get("gmail");
+            const gmailReason = searchParams.get("reason");
+            if (gmailParam) {
+                window.opener.postMessage({
+                    type: "GMAIL_AUTH_COMPLETE",
+                    status: gmailParam,
+                    reason: gmailReason
+                }, window.location.origin);
+                window.close();
+            }
+        }
+    }, [searchParams]);
+
+    const isPopup = typeof window !== "undefined" && window.opener && searchParams.get("gmail");
+    if (isPopup) {
+        return (
+            <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
+                <Loader2 size={32} className="text-cyan-400 animate-spin mb-4" />
+                <p className="text-sm text-zinc-300 font-medium">Completing Gmail authentication...</p>
+            </div>
+        );
+    }
     const { integrations, updateIntegration } = useIntegrationStore();
     const { activeSessionId, sessions, setActive } = useSessionStore();
 
@@ -287,9 +315,18 @@ export default function ProfilePage() {
 
     const connectGmail = async () => {
         setGmailError(null);
+        setGmailMessage(null);
         try {
             const authUrl = await getGmailOAuthUrl();
-            window.location.href = authUrl;
+            const result = await openGmailAuthPopup(authUrl);
+            if (result.status === "connected") {
+                setGmailMessage("Gmail connected successfully.");
+                await syncGmailStatus();
+            } else if (result.status === "error") {
+                setGmailError(result.reason || "Gmail OAuth failed. Please try again.");
+            } else {
+                await syncGmailStatus();
+            }
         } catch (e) {
             setGmailError(e instanceof Error ? e.message : "Failed to start Gmail OAuth");
         }
@@ -440,12 +477,12 @@ export default function ProfilePage() {
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
                                         "w-10 h-10 rounded-xl border flex items-center justify-center transition-colors shadow-sm flex-shrink-0",
-                                        isSlack ? "bg-[#4A154B]/20 border-[#4A154B]/40" : 
-                                        isGmail ? "bg-red-500/10 border-red-500/20" : 
+                                        isSlack ? "bg-white border-white" : 
+                                        isGmail ? "bg-white" : 
                                         "bg-white/5 border-white/10"
                                     )}>
-                                        {isSlack ? <Hash size={18} className="text-[#e01e5a]" /> : 
-                                         isGmail ? <Mail size={18} className="text-red-400" /> : 
+                                        {isSlack ? <SlackLogo className="w-[22px] h-[22px]" /> : 
+                                         isGmail ? <GmailLogo className="w-[22px] h-[22px]" /> : 
                                          <source.icon size={18} className="text-zinc-600" />}
                                     </div>
                                     <div>

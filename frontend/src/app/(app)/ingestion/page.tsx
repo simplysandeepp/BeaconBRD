@@ -11,6 +11,8 @@ import {
 import { cn } from '@/lib/utils';
 import Drawer from '@/components/ui/Drawer';
 import Link from 'next/link';
+import { GmailLogo } from '@/components/icons/GmailLogo';
+import { SlackLogo } from '@/components/icons/SlackLogo';
 import {
     uploadFile,
     uploadFileForOcr,
@@ -27,6 +29,7 @@ import {
     disconnectGmail,
     listGmailEmails,
     ingestGmailEmails,
+    openGmailAuthPopup,
     type Chunk,
     type GmailStatus,
     type GmailEmail,
@@ -245,7 +248,15 @@ export default function IngestionPage() {
     const startGmailConnect = async () => {
         try {
             const authUrl = await getGmailOAuthUrl();
-            window.location.href = authUrl;
+            const result = await openGmailAuthPopup(authUrl);
+            if (result.status === "connected") {
+                setGmailMessage("Gmail connected.");
+                await syncGmailData(true);
+            } else if (result.status === "error") {
+                setUploadError(result.reason || "Gmail OAuth failed. Please try again.");
+            } else {
+                await syncGmailData(true);
+            }
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to start Gmail OAuth');
         }
@@ -537,8 +548,8 @@ export default function IngestionPage() {
                 >
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-[#4A154B]/40 border border-[#4A154B]/60 flex items-center justify-center">
-                                <Hash size={18} className="text-[#e01e5a]" />
+                            <div className="w-10 h-10 rounded-xl bg-white border border-white shadow-sm flex items-center justify-center">
+                                <SlackLogo className="w-[22px] h-[22px]" />
                             </div>
                             <div>
                                 <h3 className="text-sm font-semibold text-zinc-100">Slack</h3>
@@ -644,16 +655,8 @@ export default function IngestionPage() {
                 >
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div
-                                className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
-                                    gmailStatus?.connected
-                                        ? 'bg-emerald-500/15 border-emerald-500/25'
-                                        : gmailStatus?.available
-                                            ? 'bg-blue-500/15 border-blue-500/25'
-                                            : 'bg-white/5 border-white/10'
-                                }`}
-                            >
-                                <Mail size={18} className={gmailStatus?.connected ? 'text-emerald-400' : gmailStatus?.available ? 'text-blue-300' : 'text-zinc-600'} />
+                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                                <GmailLogo className="w-[22px] h-[22px]" />
                             </div>
                             <div>
                                 <h3 className="text-sm font-semibold text-zinc-100">Gmail</h3>

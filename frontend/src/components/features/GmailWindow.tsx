@@ -8,10 +8,11 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { GmailLogo } from '@/components/icons/GmailLogo';
 import { 
     getGmailStatus, getGmailProfile, 
     getGmailThreadFull, getGmailAttachment, getGmailOAuthUrl,
-    listGmailEmails, getGmailCachedEmails, type GmailEmail, type GmailSearchOptions,
+    listGmailEmails, getGmailCachedEmails, openGmailAuthPopup, type GmailEmail, type GmailSearchOptions,
     type GmailProfile, type GmailThread
 } from '@/lib/apiClient';
 import { getGmailCache, setGmailCache } from '@/lib/gmailCache';
@@ -348,8 +349,19 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
     };
 
     const handleConnect = async () => {
-        const url = await getGmailOAuthUrl();
-        window.location.href = url;
+        try {
+            const url = await getGmailOAuthUrl();
+            const result = await openGmailAuthPopup(url);
+            if (result.status === "connected") {
+                await fetchStatus();
+            } else if (result.status === "error") {
+                setError(result.reason || "Gmail OAuth failed. Please try again.");
+            } else {
+                await fetchStatus();
+            }
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to start Gmail OAuth");
+        }
     };
 
     const parseMessageBody = (payload: any) => {
@@ -582,8 +594,8 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                             exit={{ opacity: 0 }}
                             className="absolute inset-0 z-40 bg-zinc-950/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
                         >
-                            <div className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 shadow-2xl">
-                                <Mail size={40} className="text-cyan-400" />
+                            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+                                <GmailLogo className="w-10 h-10" />
                             </div>
                             <h2 className="text-xl font-bold text-zinc-100 mb-2">Connect your Gmail</h2>
                             <p className="text-sm text-zinc-400 max-w-xs mb-8">
@@ -658,8 +670,8 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                             </>
                         ) : (
                             <>
-                                <div className={cn("rounded-full bg-gradient-to-tr from-cyan-400/20 to-purple-400/20 border border-white/10 flex items-center justify-center flex-shrink-0 transition-all", sidebarCollapsed ? "w-8 h-8" : "w-10 h-10")}>
-                                    <Mail size={sidebarCollapsed ? 14 : 18} className="text-cyan-400" />
+                                <div className={cn("bg-white shadow-sm flex items-center justify-center flex-shrink-0 transition-all rounded-xl", sidebarCollapsed ? "w-8 h-8" : "w-10 h-10")}>
+                                    <GmailLogo className={sidebarCollapsed ? "w-[16px] h-[16px]" : "w-[20px] h-[20px]"} />
                                 </div>
                                 {!sidebarCollapsed && (
                                     <div className="flex flex-col">
@@ -804,8 +816,8 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                     </button>
                                 </div>
                             ) : emails.length === 0 ? (
-                                <div key="empty" className="h-full flex flex-col items-center justify-center p-10 text-center opacity-40">
-                                    <Mail size={60} className="text-zinc-700 mb-6" />
+                                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                                    <GmailLogo className="w-[60px] h-[60px] mb-6 grayscale opacity-40" />
                                     <p className="text-sm text-zinc-500 font-medium">No emails found matching your criteria</p>
                                 </div>
                             ) : (

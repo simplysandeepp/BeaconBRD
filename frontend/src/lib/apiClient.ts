@@ -637,3 +637,46 @@ export async function exportBRD(
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
+export function openGmailAuthPopup(authUrl: string): Promise<{ status: string; reason: string | null }> {
+    return new Promise((resolve, reject) => {
+        const width = 600;
+        const height = 650;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        
+        const popup = window.open(
+            authUrl,
+            "Gmail OAuth",
+            `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`
+        );
+        
+        if (!popup) {
+            reject(new Error("Popup blocked by browser. Please enable popups for this site."));
+            return;
+        }
+        
+        const messageListener = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            if (event.data?.type === "GMAIL_AUTH_COMPLETE") {
+                window.removeEventListener("message", messageListener);
+                resolve({
+                    status: event.data.status,
+                    reason: event.data.reason || null
+                });
+            }
+        };
+        
+        window.addEventListener("message", messageListener);
+        
+        // Poll to check if popup was closed by user
+        const timer = setInterval(() => {
+            if (popup.closed) {
+                clearInterval(timer);
+                window.removeEventListener("message", messageListener);
+                // Resolve with 'closed' status so the parent can decide what to do
+                resolve({ status: "closed", reason: "Popup closed by user" });
+            }
+        }, 1000);
+    });
+}
