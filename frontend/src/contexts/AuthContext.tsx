@@ -89,7 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetch('/api/auth/session', { method: 'DELETE' }).catch(() => { });
 
     useEffect(() => {
-        console.log('[AuthProvider] Initializing Firebase auth listener');
         let unsubscribe: (() => void) | undefined;
         try {
             unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -107,10 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             : null
                     );
                     if (firebaseUser) {
-                        console.log('[AuthProvider] User authenticated:', firebaseUser.uid);
                         initSessions(firebaseUser.uid).catch((e: Error) => console.error('[AuthProvider] initSessions error:', e));
                     } else {
-                        console.log('[AuthProvider] No user authenticated');
                         clearSessionCookie().then(() => {
                             const isProtectedRoute = ['/dashboard', '/brd', '/settings', '/signals', '/ingestion', '/invite'].some(
                                 prefix => pathname.startsWith(prefix)
