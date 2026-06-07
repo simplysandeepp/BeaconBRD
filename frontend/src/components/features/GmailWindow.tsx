@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     Search, Filter, ChevronDown, Mail, Inbox, Send, Star, Clock, Trash2, 
-    MoreVertical, CheckSquare, Square, RefreshCcw, X, Paperclip, 
+    MoreVertical, CheckSquare, Square, RefreshCw, X, Paperclip, 
     AlertCircle, Loader2, ArrowLeft, Trash, FileText, Download, Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,6 +21,67 @@ interface GmailReplicaProps {
     onIngest: (selectedIds: string[], includeAttachments?: boolean) => void;
     isIngesting: boolean;
 }
+
+// Friendly sandboxed iframe to prevent email HTML stylesheet pollution/bleeding
+const HtmlContent = ({ html }: { html: string }) => {
+    const iframeRef = useRef<HTMLIFrameElement>(null);
+
+    useEffect(() => {
+        const iframe = iframeRef.current;
+        if (!iframe) return;
+        
+        const handleResize = () => {
+            if (iframe.contentWindow?.document.body) {
+                iframe.style.height = `${iframe.contentWindow.document.body.scrollHeight + 24}px`;
+            }
+        };
+        
+        iframe.addEventListener('load', handleResize);
+        const timer = setTimeout(handleResize, 500);
+        
+        return () => {
+            iframe.removeEventListener('load', handleResize);
+            clearTimeout(timer);
+        };
+    }, [html]);
+
+    const styledHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    font-size: 13.5px;
+                    line-height: 1.6;
+                    color: #d4d4d8; /* text-zinc-300 */
+                    background-color: transparent;
+                    margin: 0;
+                    padding: 0;
+                    word-break: break-word;
+                }
+                a { color: #06b6d4; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+                img { max-width: 100%; height: auto; border-radius: 8px; }
+                pre { background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px; overflow-x: auto; }
+            </style>
+        </head>
+        <body>
+            ${html}
+        </body>
+        </html>
+    `;
+
+    return (
+        <iframe
+            ref={iframeRef}
+            srcDoc={styledHtml}
+            sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+            className="w-full border-none bg-transparent"
+            style={{ height: 'auto', minHeight: '80px', display: 'block' }}
+        />
+    );
+};
 
 export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailReplicaProps) {
     const [emails, setEmails] = useState<GmailEmail[]>([]);
@@ -506,7 +567,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                         className="p-2 hover:bg-white/10 rounded-full text-zinc-400 transition-colors disabled:opacity-30"
                         title="Sync Emails"
                     >
-                        <RefreshCcw size={18} className={cn(loading && "animate-spin")} />
+                        <RefreshCw size={18} className={cn(loading && "animate-spin")} />
                     </button>
                 </div>
             </div>
@@ -672,20 +733,29 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                                         <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">
                                                             {msg.payload.headers.find((h: any) => h.name === 'From')?.value[0].toUpperCase()}
                                                         </div>
-                                                        <div>
+                                                                                        <div>
                                                             <p className="text-sm font-bold text-zinc-100">{msg.payload.headers.find((h: any) => h.name === 'From')?.value}</p>
-                                                            <p className="text-[10px] text-zinc-500">To: {msg.payload.headers.find((h: any) => h.name === 'To')?.value}</p>
+                                                            <div className="flex items-center gap-2 flex-wrap mt-1">
+                                                                <p className="text-[10px] text-zinc-500">To: {msg.payload.headers.find((h: any) => h.name === 'To')?.value}</p>
+                                                                {msg.labelIds && msg.labelIds.map(label => (
+                                                                    <span key={label} className="bg-white/5 border border-white/10 text-cyan-400/90 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider font-mono">
+                                                                        {label}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <span className="text-[10px] text-zinc-600 font-mono">
-                                                        {new Date(parseInt(msg.payload.headers.find((h: any) => h.name === 'Date')?.value || '0')).toLocaleString()}
+                                                        {(() => {
+                                                            const dateHeader = msg.payload.headers.find((h: any) => h.name === 'Date')?.value;
+                                                            if (!dateHeader) return 'Unknown Date';
+                                                            const parsed = Date.parse(dateHeader);
+                                                            return isNaN(parsed) ? dateHeader : new Date(parsed).toLocaleString();
+                                                        })()}
                                                     </span>
                                                 </div>
                                                 <div className="text-sm text-zinc-300 leading-relaxed pl-11">
-                                                    <div 
-                                                        className="prose prose-invert max-w-none text-zinc-300"
-                                                        dangerouslySetInnerHTML={{ __html: parseMessageBody(msg.payload) }} 
-                                                    />
+                                                    <HtmlContent html={parseMessageBody(msg.payload)} />
                                                 </div>
 
                                                 {getAttachments(msg.payload).length > 0 && (
@@ -829,7 +899,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                             disabled={isIngesting}
                             className="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-black px-8 py-2.5 rounded-xl text-xs uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] disabled:opacity-50 flex items-center gap-2"
                         >
-                            {isIngesting ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                            {isIngesting ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                             {isIngesting ? 'Ingesting...' : 'Ingest Selected'}
                         </button>
                     </motion.div>
