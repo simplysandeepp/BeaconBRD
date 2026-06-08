@@ -965,7 +965,7 @@ See the full step-by-step guide in **[DEPLOY-GUIDE.md](DEPLOY-GUIDE.md)** — co
 [![Contributing](https://img.shields.io/badge/Contributing-Guide-6C63FF?style=for-the-badge)](CONTRIBUTING.md)
 [![GitHub Stars](https://img.shields.io/github/stars/DevAryanSin/BeaconBRD?style=for-the-badge&logo=github&color=f59e0b)](https://github.com/DevAryanSin/BeaconBRD)
 
-<sub>Built with ❤️ for HackFest 2.0 · Powered by **Groq** · **Next.js** · **FastAPI** · **Firebase**</sub>
+<sub>Built with ❤️ by Team FineTunners · Powered by **Groq** · **Next.js** · **FastAPI** · **Firebase**</sub>
 
 </div>
 
