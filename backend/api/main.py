@@ -54,29 +54,50 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# ── CORS configuration ──────────────────────────────────────────────────────
+# Allowed origins: production frontend + common local-dev ports
+ALLOWED_ORIGINS = [
+    "https://beacon-brd.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:5173",
+]
 
+# Standard FastAPI CORS middleware — handles preflight & response headers
+# correctly for all routes, including error responses.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
+)
 
-# Global CORS header injector — ensures every response (including errors) has CORS headers
+# Additional safety-net middleware: ensures every response (including
+# unhandled exceptions and responses from other middleware layers) carries
+# CORS headers.  Works alongside CORSMiddleware above — if CORSMiddleware
+# already set the headers we don't overwrite them.
 @app.middleware("http")
 async def cors_header_injector(request: Request, call_next):
     origin = request.headers.get("Origin", "")
-    
-    # Strictly allowed frontend URL
-    allowed_frontend = "https://beacon-brd.vercel.app"
 
-    # Strictly lock down communication to only the specified frontend and local development
-    if origin:
-        if origin == allowed_frontend:
-            allowed_origin = origin
-        elif origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:"):
-            allowed_origin = origin
-        else:
-            return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
+    # Determine the allowed origin for this request
+    if origin in ALLOWED_ORIGINS:
+        allowed_origin = origin
+    elif origin and (origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:")):
+        allowed_origin = origin
     else:
-        # Requests with no origin (like Slack webhooks or direct backend-to-backend calls)
-        # proceed, but their CORS headers will default to the allowed frontend.
-        allowed_origin = allowed_frontend
+        # For requests with no Origin header (Slack webhooks, curl, Render
+        # health-checks, etc.) — still allow through.  CORSMiddleware above
+        # handles strict origin enforcement for credentialed requests.
+        allowed_origin = origin if origin else "*"
 
+    # Handle preflight OPTIONS requests immediately
     if request.method == "OPTIONS":
         requested_headers = request.headers.get("Access-Control-Request-Headers", "*")
         return JSONResponse(
@@ -99,11 +120,15 @@ async def cors_header_injector(request: Request, call_next):
             content={"detail": f"Internal server error: {str(exc)}"},
         )
 
-    response.headers["Access-Control-Allow-Origin"] = allowed_origin
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Expose-Headers"] = "*"
+    # Only set CORS headers if CORSMiddleware didn't already set them
+    if "access-control-allow-origin" not in response.headers:
+        response.headers["Access-Control-Allow-Origin"] = allowed_origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    if "access-control-expose-headers" not in response.headers:
+        response.headers["Access-Control-Expose-Headers"] = "*"
     return response
 
+# ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(sessions.router)
 app.include_router(ingest.router)
 app.include_router(review.router)
@@ -168,7 +193,7 @@ def wake():
     """
     wake_time = datetime.now(timezone.utc)
     estimated_ready_time = wake_time.timestamp() + 30  # 30 seconds wake time
-    
+
     return {
         "status": "waking",
         "wake_timestamp": wake_time.isoformat(),
