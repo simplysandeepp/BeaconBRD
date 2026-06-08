@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+    AlertTriangle,
     Bell,
     Check,
     ChevronDown,
@@ -31,7 +32,7 @@ import NewBRDModal from "@/components/ui/NewBRDModal";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSessionStore } from "@/store/useSessionStore";
-import { getBRD, getChunks } from "@/lib/apiClient";
+import { getBRD, getChunks, type ValidationFlag } from "@/lib/apiClient";
 
 const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, stageIndex: -1 },
@@ -183,6 +184,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     const [apiConnected, setApiConnected] = useState(false);
     const [signalCount, setSignalCount] = useState(0);
     const [flagCount, setFlagCount] = useState(0);
+    const [flags, setFlags] = useState<ValidationFlag[]>([]);
+    const [notifOpen, setNotifOpen] = useState(false);
+    const notifRef = useRef<HTMLDivElement>(null);
     const [stages, setStages] = useState<StageInfo[]>(EMPTY_STAGES);
 
     useEffect(() => {
@@ -202,10 +206,21 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     }, []);
 
     useEffect(() => {
+        const onMouseDown = (e: MouseEvent) => {
+            if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+                setNotifOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", onMouseDown);
+        return () => document.removeEventListener("mousedown", onMouseDown);
+    }, []);
+
+    useEffect(() => {
         const loadStageStatus = async () => {
             if (!activeSessionId) {
                 setSignalCount(0);
                 setFlagCount(0);
+                setFlags([]);
                 setStages(EMPTY_STAGES);
                 return;
             }
@@ -214,7 +229,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             let activeTotal = 0;
             let noiseTotal = 0;
             let brdReady = false;
-            let validationFlags = 0;
+            let validationFlagCount = 0;
 
             try {
                 const chunkRes = await getChunks(activeSessionId, "all");
@@ -229,20 +244,21 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             try {
                 const brd = await getBRD(activeSessionId, "markdown");
                 brdReady = hasGeneratedContent(brd.sections);
-                validationFlags = brd.flags.length;
+                setFlags(brd.flags);
+                setFlagCount(brd.flags.length);
             } catch {
                 brdReady = false;
-                validationFlags = 0;
+                setFlags([]);
+                setFlagCount(0);
             }
 
             setSignalCount(activeTotal);
-            setFlagCount(validationFlags);
             setStages([
                 { name: "Ingestion", status: chunkTotal > 0 ? "complete" : "pending", itemCount: chunkTotal },
                 { name: "Noise Filtering", status: chunkTotal > 0 ? "complete" : "pending", itemCount: activeTotal },
                 { name: "AKS Storage", status: activeTotal > 0 ? "complete" : "pending", itemCount: activeTotal },
                 { name: "BRD Generation", status: brdReady ? "complete" : activeTotal > 0 ? "running" : "pending" },
-                { name: "Validation", status: brdReady ? "complete" : "pending", itemCount: validationFlags },
+                { name: "Validation", status: brdReady ? "complete" : "pending", itemCount: validationFlagCount },
                 { name: "Export", status: brdReady ? "running" : "pending", itemCount: noiseTotal },
             ]);
         };
@@ -419,14 +435,110 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                                 <span className="text-zinc-400 hidden md:inline">{signalCount} signals</span>
                             </div>
 
-                            <button className="relative p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-colors flex-shrink-0">
-                                <Bell size={14} />
-                                {flagCount > 0 && (
-                                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-bold text-white">
-                                        {flagCount}
-                                    </span>
-                                )}
-                            </button>
+                            <div ref={notifRef} className="relative flex-shrink-0">
+                                <button
+                                    onClick={() => setNotifOpen((v) => !v)}
+                                    className="relative p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-colors"
+                                >
+                                    <Bell size={14} />
+                                    {flagCount > 0 && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-bold text-white">
+                                            {flagCount}
+                                        </span>
+                                    )}
+                                </button>
+
+                                <AnimatePresence>
+                                    {notifOpen && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                                            transition={{ duration: 0.15 }}
+                                            className="absolute right-0 top-full mt-2 z-50 w-80 sm:w-[340px] rounded-xl overflow-hidden"
+                                            style={{
+                                                background: "rgba(10,10,10,0.99)",
+                                                border: "1px solid rgba(255,255,255,0.10)",
+                                                boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+                                            }}
+                                        >
+                                            <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <AlertTriangle size={13} className="text-zinc-400" />
+                                                    <span className="text-xs font-semibold text-zinc-200">Alerts</span>
+                                                </div>
+                                                {flagCount > 0 && (
+                                                    <span className="text-[10px] font-bold text-zinc-400 bg-white/6 px-2 py-0.5 rounded-full">
+                                                        {flagCount} {flagCount === 1 ? "issue" : "issues"}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="max-h-[320px] overflow-y-auto">
+                                                {flags.length === 0 ? (
+                                                    <div className="px-4 py-8 text-center">
+                                                        <Bell size={20} className="text-zinc-700 mx-auto mb-2" />
+                                                        <p className="text-xs text-zinc-500">No alerts</p>
+                                                        <p className="text-[10px] text-zinc-600 mt-0.5">Validation flags will appear here</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-1.5 space-y-0.5">
+                                                        {flags.map((flag, i) => (
+                                                            <div
+                                                                key={`${flag.section_name}-${flag.flag_type}-${i}`}
+                                                                className="px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                                                            >
+                                                                <div className="flex items-start gap-2.5">
+                                                                    <div className="mt-0.5 flex-shrink-0">
+                                                                        {flag.severity === "high" ? (
+                                                                            <div className="w-5 h-5 rounded-md bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                                                                                <AlertTriangle size={10} className="text-red-400" />
+                                                                            </div>
+                                                                        ) : flag.severity === "medium" ? (
+                                                                            <div className="w-5 h-5 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                                                                                <AlertTriangle size={10} className="text-amber-400" />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="w-5 h-5 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                                                                                <AlertTriangle size={10} className="text-blue-400" />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-1.5 mb-0.5">
+                                                                            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                                                                                {flag.section_name.replace(/_/g, " ")}
+                                                                            </span>
+                                                                            <span className={cn(
+                                                                                "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                                                                                flag.severity === "high" && "bg-red-500/10 text-red-400 border border-red-500/20",
+                                                                                flag.severity === "medium" && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+                                                                                flag.severity === "low" && "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+                                                                            )}>
+                                                                                {flag.severity}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="text-[11px] text-zinc-300 leading-snug">{flag.description}</p>
+                                                                        <p className="text-[10px] text-zinc-600 mt-0.5">{flag.flag_type}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {flags.length > 0 && (
+                                                <div className="px-4 py-2.5 border-t border-white/8">
+                                                    <p className="text-[10px] text-zinc-600 text-center">
+                                                        Flags are generated during BRD validation
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
                         </div>
                     </header>
 
