@@ -10,29 +10,31 @@ const config: Config = {
     theme: {
     	extend: {
     		colors: {
-    			signal: {
-    				requirement: '#3B82F6',
-    				decision: '#8B5CF6',
-    				feedback: '#F59E0B',
-    				timeline: '#10B981',
-    				noise: '#6B7280'
-    			},
-    			severity: {
-    				high: '#EF4444',
-    				medium: '#F59E0B',
-    				low: '#3B82F6'
-    			},
-    			path: {
-    				heuristic: '#10B981',
-    				'domain-gate': '#6B7280',
-    				llm: '#8B5CF6'
-    			},
-    			pipeline: {
-    				complete: '#10B981',
-    				running: '#F59E0B',
-    				pending: '#D1D5DB',
-    				error: '#EF4444'
-    			},
+    			// ── App backgrounds (landing space palette) ──
+    			nav:       '#000000',
+    			surface:   '#121426',
+    			raised:    '#16171a',
+    			overlay:   '#0d0e14',
+
+    			// ── Accents (landing page brand) ──
+    			primary:   '#8aa5ff',
+    			accent:    '#2934ff',
+    			cta:       '#854dff',
+    			glow:      '#a3b9ff',
+
+    			// ── Semantic (data / badges only) ──
+    			success:   '#34d399',
+    			warning:   '#fbbf24',
+    			error:     '#f87171',
+    			info:      '#60a5fa',
+
+    			// ── Glass tokens ──
+    			'glass':                'rgba(18, 20, 38, 0.92)',
+    			'glass-hover':          'rgba(22, 23, 38, 0.96)',
+    			'glass-border':         'rgba(138, 165, 255, 0.09)',
+    			'glass-border-strong':  'rgba(138, 165, 255, 0.18)',
+
+    			// ── Keep HSL-based shadcn-ish tokens so dark: classes still work ──
     			background: 'hsl(var(--background))',
     			foreground: 'hsl(var(--foreground))',
     			card: {
@@ -43,7 +45,7 @@ const config: Config = {
     				DEFAULT: 'hsl(var(--popover))',
     				foreground: 'hsl(var(--popover-foreground))'
     			},
-    			primary: {
+    			primaryHsl: {
     				DEFAULT: 'hsl(var(--primary))',
     				foreground: 'hsl(var(--primary-foreground))'
     			},
@@ -55,7 +57,7 @@ const config: Config = {
     				DEFAULT: 'hsl(var(--muted))',
     				foreground: 'hsl(var(--muted-foreground))'
     			},
-    			accent: {
+    			accentHsl: {
     				DEFAULT: 'hsl(var(--accent))',
     				foreground: 'hsl(var(--accent-foreground))'
     			},
@@ -66,13 +68,6 @@ const config: Config = {
     			border: 'hsl(var(--border))',
     			input: 'hsl(var(--input))',
     			ring: 'hsl(var(--ring))',
-    			chart: {
-    				'1': 'hsl(var(--chart-1))',
-    				'2': 'hsl(var(--chart-2))',
-    				'3': 'hsl(var(--chart-3))',
-    				'4': 'hsl(var(--chart-4))',
-    				'5': 'hsl(var(--chart-5))'
-    			}
     		},
     		fontFamily: {
     			sans: [
@@ -99,13 +94,14 @@ const config: Config = {
     			sm: 'calc(var(--radius) - 4px)'
     		},
     		boxShadow: {
-    			glass: '0 8px 32px rgba(0,0,0,0.40)',
-    			'glass-lg': '0 20px 60px rgba(0,0,0,0.55)',
-    			'glow-cyan': '0 0 24px rgba(6,182,212,0.30)',
-    			'glow-purple': '0 0 24px rgba(139,92,246,0.30)',
-    			'glow-green': '0 0 24px rgba(16,185,129,0.25)',
-    			'glow-amber': '0 0 24px rgba(245,158,11,0.25)',
-    			'glow-red': '0 0 24px rgba(239,68,68,0.25)'
+    			glass: '0 8px 40px rgba(0,0,0,0.60)',
+    			'glass-lg': '0 24px 80px rgba(0,0,0,0.75)',
+    			'glow-blue': '0 0 24px rgba(138, 165, 255, 0.25)',
+    			'glow-electric': '0 0 24px rgba(41, 52, 255, 0.30)',
+    			'glow-purple': '0 0 24px rgba(133, 77, 255, 0.25)',
+    			'glow-green': '0 0 20px rgba(52, 211, 153, 0.18)',
+    			'glow-amber': '0 0 20px rgba(251, 191, 36, 0.18)',
+    			'glow-red': '0 0 20px rgba(248, 113, 113, 0.18)'
     		},
     		animation: {
     			'pulse-slow': 'pulse 3s ease-in-out infinite',
@@ -113,9 +109,9 @@ const config: Config = {
     			'slide-in-right': 'slide-in-right 0.3s cubic-bezier(0.16,1,0.3,1) forwards'
     		},
     		backgroundImage: {
-    			'glass-gradient': 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
-    			'brand-gradient': 'linear-gradient(135deg, #22d3ee, #818cf8, #c084fc)',
-    			'cyan-gradient': 'linear-gradient(135deg, #0ea5e9, #06b6d4)'
+    			'brand-gradient': 'linear-gradient(135deg, #8aa5ff, #2934ff, #854dff)',
+    			'blue-gradient': 'linear-gradient(135deg, #031457, #2934ff)',
+    			'glass-gradient': 'linear-gradient(135deg, rgba(138,165,255,0.06) 0%, rgba(138,165,255,0.02) 100%)',
     		}
     	}
     },
