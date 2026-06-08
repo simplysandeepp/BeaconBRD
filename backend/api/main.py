@@ -62,7 +62,7 @@ async def cors_header_injector(request: Request, call_next):
     origin = request.headers.get("Origin", "")
     
     # Strictly allowed frontend URL
-    allowed_frontend = "https://beacon-brd.vercel.app"
+    allowed_frontend = "http://localhost:3000"
 
     # Strictly lock down communication to only the specified frontend and local development
     if origin:

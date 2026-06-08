@@ -4,6 +4,7 @@ uvicorn>=0.22.0
 
 # LLM and AI
 groq>=0.4.0
+google-cloud-vision>=3.4.0
 google-cloud-firestore>=2.11.0
 google-api-python-client>=2.95.0
 google-auth>=2.22.0

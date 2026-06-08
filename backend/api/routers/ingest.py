@@ -17,6 +17,7 @@ from storage import copy_session_chunks
 from classifier import classify_chunks
 from schema import ClassifiedChunk, SignalLabel
 import pdf
+import ocr
 
 # Session ID of the pre-classified 300-email Enron demo cache
 DEMO_CACHE_SESSION_ID = os.environ.get("DEMO_CACHE_SESSION_ID", "default_session")
@@ -283,63 +284,53 @@ async def upload_file_ocr(
     file: UploadFile = File(...),
 ):
     """
-    OCR upload endpoint — accepts PDFs and images, extracts text via OCR,
-    then classifies and stores chunks into the session.
-
-    NOTE: This is a placeholder. The actual OCR integration (Tesseract, cloud
-    OCR, etc.) will be wired in later. For now, for PDFs it falls back to
-    PyMuPDF text extraction; for images it returns an error prompting the
-    user to paste text manually or wait for OCR integration.
+    OCR upload endpoint — accepts PDFs and images, extracts text via OCR
+    using Google Cloud Vision API, then classifies and stores chunks.
     """
     filename = file.filename or "uploaded_file"
     file_bytes = await file.read()
     ext = (filename.rsplit(".", 1)[-1] if "." in filename else "").lower()
 
-    # For PDFs, fall back to PyMuPDF text extraction (works for text-based PDFs)
-    if ext == "pdf":
-        text = pdf.extract_text_from_pdf_bytes(file_bytes)
-        if not text or len(text.strip()) < 15:
+    # Supported image extensions
+    image_exts = {"png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp"}
+
+    try:
+        if ext == "pdf":
+            text = ocr.extract_text_from_pdf(file_bytes)
+        elif ext in image_exts:
+            text = ocr.extract_text_from_image(file_bytes)
+        else:
             raise HTTPException(
                 status_code=400,
-                detail=f"PDF '{filename}' contains no extractable text. "
-                       "Scanned PDFs require OCR which is coming soon. "
-                       "Please use a text-based PDF or paste the text directly."
+                detail=f"Unsupported file type '.{ext}' for OCR upload. "
+                       "Supported: PDF, PNG, JPG, JPEG, GIF, BMP, TIFF, WEBP."
             )
-        chunk_dicts = _chunk_text(text, filename, "pdf")
+
+        if not text or len(text.strip()) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail=f"OCR failed to extract usable text from '{filename}'."
+            )
+
+        chunk_dicts = _chunk_text(text, filename, ext)
         if not chunk_dicts:
-            raise HTTPException(status_code=400, detail="No classifiable chunks produced from PDF.")
+            raise HTTPException(status_code=400, detail="No classifiable chunks produced after OCR.")
 
-        api_key = _load_api_key()
-        try:
-            classified = classify_chunks(chunk_dicts, api_key=api_key)
-        except Exception:
-            classified = _heuristic_classify_fallback(chunk_dicts, session_id, "pdf", filename)
-
-        for c in classified:
-            c.session_id = session_id
-        store_chunks(classified)
+        _process_and_store(session_id, chunk_dicts)
 
         return {
-            "message": f"PDF processed. {len(classified)} chunks classified and stored.",
-            "chunk_count": len(classified),
+            "message": f"OCR complete. {len(chunk_dicts)} chunks processed and stored.",
+            "chunk_count": len(chunk_dicts),
             "filename": filename,
         }
 
-    # For images — OCR not yet integrated
-    image_exts = {"png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp"}
-    if ext in image_exts:
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(
-            status_code=501,
-            detail=f"OCR for image files ({ext.upper()}) is not yet integrated. "
-                   "Please paste the text from this image manually, or wait for OCR support."
+            status_code=500,
+            detail=f"OCR processing failed: {str(e)}"
         )
-
-    # Unknown file type
-    raise HTTPException(
-        status_code=400,
-        detail=f"Unsupported file type '.{ext}' for OCR upload. "
-               "Supported: PDF, PNG, JPG, JPEG, GIF, BMP, TIFF, WEBP."
-    )
 
 
 def _heuristic_classify_fallback(chunk_dicts: list, session_id: str, source_type: str, filename: str) -> list:
