@@ -9,6 +9,7 @@ import {
     CheckCircle2,
     Download,
     File,
+    FileDown,
     FileText,
     Loader2,
     Pencil,
@@ -44,6 +45,13 @@ const FORMAT_CARDS = [
         icon: <Table2 size={22} className="text-blue-300" />,
         desc: "Word document for stakeholder review and offline editing.",
         sub: "Business-ready",
+    },
+    {
+        id: "pdf" as ExportFormat,
+        label: "PDF",
+        icon: <FileDown size={22} className="text-red-400" />,
+        desc: "Polished, print-ready document with full styling and formatting.",
+        sub: "Print-ready",
     },
     {
         id: "html" as ExportFormat,
@@ -359,7 +367,7 @@ export default function ExportPage() {
 
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.18 }}>
                 <h2 className="text-sm font-semibold text-zinc-200 mb-3">Export Format</h2>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {FORMAT_CARDS.map((fmt, i) => {
                         const isDownloading = downloading === fmt.id;
                         const disabled = !allOk || !sessionId || isDownloading;

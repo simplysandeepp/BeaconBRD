@@ -15,7 +15,7 @@ sys.path.append(PROJECT_ROOT)
 
 from brd_module.brd_pipeline import run_brd_generation
 from brd_module.validator import validate_brd
-from brd_module.exporter import export_brd, export_brd_to_docx
+from brd_module.exporter import export_brd, export_brd_to_docx, export_brd_to_pdf, WEASYPRINT_AVAILABLE
 from brd_module.storage import get_latest_brd_sections, store_brd_section, get_connection
 from brd_module.hitl.orchestrator import submit_ad_hoc_prompt
 
@@ -349,10 +349,11 @@ def edit_brd_section(session_id: str, section_name: str, body: EditSectionReques
 def export_brd_document(session_id: str, format: str = "markdown"):
     """
     Export the compiled BRD document as a downloadable file.
-    
+
     - format=markdown → returns .md file as text/plain download
     - format=html     → returns .html file with styling
     - format=docx     → returns .docx binary (requires python-docx)
+    - format=pdf      → returns .pdf binary (requires weasyprint)
     """
     try:
         sections = get_latest_brd_sections(session_id)
@@ -399,6 +400,23 @@ def export_brd_document(session_id: str, format: str = "markdown"):
                     "Content-Disposition": f"attachment; filename=brd_{session_id}.docx"
                 }
             )
+        elif format == "pdf":
+            if not WEASYPRINT_AVAILABLE:
+                raise HTTPException(
+                    status_code=503,
+                    detail="PDF export is not available on this server. WeasyPrint is not installed."
+                )
+            try:
+                pdf_bytes = export_brd_to_pdf(session_id)
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f"attachment; filename=brd_{session_id}.pdf"
+                    }
+                )
+            except ImportError as e:
+                raise HTTPException(status_code=503, detail=str(e))
         else:
             # Default: Markdown as a downloadable text file
             markdown_content = export_brd(session_id)

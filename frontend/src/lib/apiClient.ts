@@ -608,7 +608,7 @@ export async function ingestGmailEmails(
     });
 }
 
-export type ExportFormat = "markdown" | "html" | "docx";
+export type ExportFormat = "markdown" | "html" | "docx" | "pdf";
 
 export async function exportBRD(
     sessionId: string,
@@ -629,7 +629,7 @@ export async function exportBRD(
 
     const disposition = res.headers.get("content-disposition") ?? "";
     const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
-    const fallbackExt = format === "docx" ? "docx" : format === "html" ? "html" : "md";
+    const fallbackExt = format === "docx" ? "docx" : format === "html" ? "html" : format === "pdf" ? "pdf" : "md";
     a.download = filenameMatch?.[1] ?? `brd_${sessionId}.${fallbackExt}`;
 
     document.body.appendChild(a);
