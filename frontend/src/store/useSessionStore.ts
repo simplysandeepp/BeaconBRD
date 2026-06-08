@@ -21,6 +21,7 @@ import {
     collection,
     serverTimestamp,
     getDoc,
+    updateDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -59,6 +60,7 @@ interface SessionStore {
 
     setActive: (id: string) => void;
     updateSession: (id: string, patch: Partial<Omit<BRDSession, 'id'>>) => void;
+    renameSession: (id: string, uid: string, newName: string) => Promise<void>;
     removeSession: (id: string, uid: string) => Promise<void>;
 }
 
@@ -162,6 +164,30 @@ export const useSessionStore = create<SessionStore>()((set, get) => ({
                 s.id === id ? { ...s, ...patch } : s
             ),
         })),
+
+    renameSession: async (id, uid, newName) => {
+        // Persist to Firestore board doc and user membership index
+        try {
+            await updateDoc(doc(db, 'boards', id), {
+                title: newName,
+                updatedAt: serverTimestamp(),
+            });
+        } catch { /* board doc may not exist yet — ignore */ }
+
+        try {
+            await updateDoc(doc(db, 'users', uid, 'boards', id), {
+                boardTitle: newName,
+                updatedAt: serverTimestamp(),
+            });
+        } catch { /* membership index may not exist — ignore */ }
+
+        // Update local state
+        set((state) => ({
+            sessions: state.sessions.map((s) =>
+                s.id === id ? { ...s, name: newName } : s
+            ),
+        }));
+    },
 
     removeSession: async (id, uid) => {
         try {

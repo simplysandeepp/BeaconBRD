@@ -10,6 +10,7 @@
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/DevAryanSin/BeaconBRD)
 [![Deploy Guide](https://img.shields.io/badge/Deploy%20Guide-Read%20Now-0A66C2?style=for-the-badge&logo=readthedocs&logoColor=white)](DEPLOY-GUIDE.md)
 [![Contributing](https://img.shields.io/badge/Contributing-Guide-6C63FF?style=for-the-badge)](CONTRIBUTING.md)
+[![License](https://img.shields.io/badge/License-MIT-2ea44f?style=for-the-badge)](LICENSE)
 
 ---
 
@@ -21,8 +22,10 @@
 ![Firebase](https://img.shields.io/badge/Firebase-Auth%20%26%20Firestore-FFCA28?style=flat-square&logo=firebase&logoColor=black)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-AKS%20Database-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
 </div>
+
 <!-- 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=hx63_Fr5I8g">
@@ -34,26 +37,45 @@
 
 ---
 
+## ✨ Key Features
+
+| Feature | Description |
+|---|---|
+| 📥 **Multi-Source Ingestion** | Upload files (`.txt`, `.csv`, `.docx`), connect Slack, run the Enron email demo, or send raw JSON |
+| 🧹 **AI Noise Filtering** | Two-phase classifier (heuristics + Groq LLM) suppresses system alerts, scheduling, and chatter |
+| 🤖 **7 Parallel AI Agents** | Specialized agents generate every BRD section simultaneously via ThreadPoolExecutor |
+| ✅ **Validation Engine** | Automatic gap detection and semantic contradiction checking across requirements and decisions |
+| ✏️ **Human-in-the-Loop** | Edit any section, lock approved content, and preserve edits across re-runs |
+| 📤 **Multi-Format Export** | Download polished BRDs as `.md`, `.html`, or `.docx` |
+| 👥 **Team Collaboration** | Role-based board sharing (Viewer / Editor) with invite links via Firestore |
+| 🔍 **Signal Traceability** | Every requirement traced back to its original source chunk and speaker |
+| 📊 **Real-Time Streaming** | SSE-powered live agent progress during BRD generation |
+| 🔐 **Secure Auth** | Firebase Authentication with session cookies and middleware route protection |
+
+---
+
 ## Table of Contents
 
 1. [What is Beacon?](#1-what-is-beacon)
 2. [The Problem It Solves](#2-the-problem-it-solves)
 3. [How Users Benefit](#3-how-users-benefit)
-4. [Complete User Flow](#4-complete-user-flow)
-5. [System Architecture](#5-system-architecture)
-6. [Frontend Architecture](#6-frontend-architecture)
-7. [Backend Processing Pipeline](#7-backend-processing-pipeline)
-8. [AI Classification Engine](#8-ai-classification-engine)
-9. [Multi-Agent BRD Generation](#9-multi-agent-brd-generation)
-10. [Database & Persistence Model](#10-database--persistence-model)
-11. [API Reference](#11-api-reference)
-12. [Frontend Route Map](#12-frontend-route-map)
-13. [Tech Stack](#13-tech-stack)
-14. [Repository Structure](#14-repository-structure)
-15. [Local Development Setup](#15-local-development-setup)
-16. [Environment Variables](#16-environment-variables)
-17. [Deployment](#17-deployment)
-18. [Team](#18-team)
+4. [How It Works — 4 Steps](#4-how-it-works--4-steps)
+5. [Complete User Flow](#5-complete-user-flow)
+6. [System Architecture](#6-system-architecture)
+7. [Frontend Architecture](#7-frontend-architecture)
+8. [Backend Processing Pipeline](#8-backend-processing-pipeline)
+9. [AI Classification Engine](#9-ai-classification-engine)
+10. [Multi-Agent BRD Generation](#10-multi-agent-brd-generation)
+11. [Database & Persistence Model](#11-database--persistence-model)
+12. [API Reference](#12-api-reference)
+13. [Frontend Route Map](#13-frontend-route-map)
+14. [Tech Stack](#14-tech-stack)
+15. [Repository Structure](#15-repository-structure)
+16. [Quick Start](#16-quick-start)
+17. [Local Development Setup](#17-local-development-setup)
+18. [Environment Variables](#18-environment-variables)
+19. [Deployment](#19-deployment)
+20. [Team](#20-team)
 
 ---
 
@@ -127,7 +149,26 @@ Verbal calls   ──┘
 
 ---
 
-## 4. Complete User Flow
+## 4. How It Works — 4 Steps
+
+```
+┌─────────────┐    ┌──────────────┐    ┌──────────────┐    ┌─────────────┐
+│  1. INGEST   │───▶│  2. CLASSIFY  │───▶│  3. GENERATE │───▶│  4. EXPORT  │
+│              │    │              │    │              │    │             │
+│ Upload files │    │ AI separates │    │ 7 AI agents  │    │ .md .html   │
+│ Connect Slack│    │ signals from │    │ write BRD    │    │   .docx     │
+│ Run demo     │    │ noise        │    │ sections     │    │             │
+└─────────────┘    └──────────────┘    └──────────────┘    └─────────────┘
+```
+
+1. **Ingest** — Upload files, connect Slack, or try the Enron email demo dataset
+2. **Classify** — The two-phase noise filter labels every chunk as signal or noise
+3. **Generate** — Seven specialized AI agents write BRD sections in parallel; the validator flags gaps and contradictions
+4. **Export** — Download a polished document or share the board with your team
+
+---
+
+## 5. Complete User Flow
 
 ```mermaid
 flowchart TD
@@ -187,7 +228,7 @@ flowchart TD
 
 ---
 
-## 5. System Architecture
+## 6. System Architecture
 
 ### High-Level Component Map
 
@@ -259,7 +300,7 @@ graph TB
 
 ---
 
-## 6. Frontend Architecture
+## 7. Frontend Architecture
 
 ```mermaid
 flowchart TD
@@ -327,7 +368,7 @@ flowchart TD
 
 ---
 
-## 7. Backend Processing Pipeline
+## 8. Backend Processing Pipeline
 
 ```mermaid
 sequenceDiagram
@@ -385,7 +426,7 @@ sequenceDiagram
 
 ---
 
-## 8. AI Classification Engine
+## 9. AI Classification Engine
 
 The noise filter runs a two-phase parallel pipeline before any chunk reaches the AKS.
 
@@ -431,7 +472,7 @@ flowchart TD
 
 ---
 
-## 9. Multi-Agent BRD Generation
+## 10. Multi-Agent BRD Generation
 
 ```mermaid
 flowchart LR
@@ -481,7 +522,7 @@ flowchart LR
 
 ---
 
-## 10. Database & Persistence Model
+## 11. Database & Persistence Model
 
 ```mermaid
 erDiagram
@@ -546,7 +587,7 @@ invites/{token}              ← boardId + role + expiry (24h TTL)
 
 ---
 
-## 11. API Reference
+## 12. API Reference
 
 ### Sessions
 
@@ -601,7 +642,7 @@ invites/{token}              ← boardId + role + expiry (24h TTL)
 
 ---
 
-## 12. Frontend Route Map
+## 13. Frontend Route Map
 
 | Route | Auth Required | Description |
 |---|---|---|
@@ -621,7 +662,7 @@ invites/{token}              ← boardId + role + expiry (24h TTL)
 
 ---
 
-## 13. Tech Stack
+## 14. Tech Stack
 
 ### Frontend
 
@@ -652,7 +693,7 @@ invites/{token}              ← boardId + role + expiry (24h TTL)
 
 ---
 
-## 14. Repository Structure
+## 15. Repository Structure
 
 ```
 Beacon/
@@ -716,14 +757,55 @@ Beacon/
 
 ---
 
-## 15. Local Development Setup
+## 16. Quick Start
+
+Get Beacon running locally in under 5 minutes:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/DevAryanSin/BeaconBRD
+cd Beacon
+
+# 2. Set up the backend
+cd backend
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # macOS / Linux
+pip install -r requirements.txt
+
+# 3. Add your environment variables (see §18 below)
+copy .env.example .env        # Edit with your keys
+
+# 4. Start the backend
+uvicorn api.main:app --reload --port 8000
+
+# 5. In a new terminal, set up the frontend
+cd ../frontend
+npm install
+
+# 6. Add your environment variables (see §18 below)
+copy .env.example .env.local   # Edit with your keys
+
+# 7. Start the frontend
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) and start building BRDs! 🎉
+
+> **Windows users:** Run `.\start-dev.ps1` from the project root to launch both backend and frontend in one command.
+
+> **No PostgreSQL?** No problem — Beacon automatically falls back to SQLite when Postgres is unreachable.
+
+---
+
+## 17. Local Development Setup
 
 ### Prerequisites
 
-- Node.js 18+
-- Python 3.9+
-- PostgreSQL (optional — SQLite fallback activates automatically when Postgres is unreachable)
-- [mkcert](https://github.com/FiloSottile/mkcert) — only needed for Slack OAuth on localhost (HTTPS required)
+- **Node.js** 18+
+- **Python** 3.9+
+- **PostgreSQL** (optional — SQLite fallback activates automatically when Postgres is unreachable)
+- **[mkcert](https://github.com/FiloSottile/mkcert)** — only needed for Slack OAuth on localhost (HTTPS required)
 
 ### 1. Clone
 
@@ -813,7 +895,7 @@ Opens backend and frontend in separate terminal windows.
 
 ---
 
-## 16. Environment Variables
+## 18. Environment Variables
 
 ### Backend
 
@@ -850,7 +932,7 @@ Opens backend and frontend in separate terminal windows.
 
 ---
 
-## 17. Deployment
+## 19. Deployment
 
 See the full step-by-step guide in **[DEPLOY-GUIDE.md](DEPLOY-GUIDE.md)** — covers Vercel, Render, Firebase, Slack OAuth, and Postgres provisioning with exact field values.
 
@@ -858,9 +940,11 @@ See the full step-by-step guide in **[DEPLOY-GUIDE.md](DEPLOY-GUIDE.md)** — co
 - **Frontend → Vercel** — Root Directory: `frontend`. Add all env vars in the Vercel dashboard. Set `NEXT_PUBLIC_API_URL` to your Render URL after the backend is live.
 - **Backend → Render** — Docker deploy from `backend/`. Add Groq, DB, and URL env vars. Use Render Postgres add-on or Supabase/Neon for the database.
 
+> **Docker:** A `Dockerfile` is included in `backend/` for containerized deployments.
+
 ---
 
-## 18. Team
+## 20. Team
 
 | Name GitHub |
 |---|
@@ -872,6 +956,20 @@ See the full step-by-step guide in **[DEPLOY-GUIDE.md](DEPLOY-GUIDE.md)** — co
 
 ---
 
+<div align="center">
+
+### 🔦 Beacon — Stop writing BRDs manually. Start generating them.
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Beacon-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://beacon.sandeepp.in/)
+[![Deploy Guide](https://img.shields.io/badge/Deploy%20Guide-Read%20Now-0A66C2?style=for-the-badge&logo=readthedocs&logoColor=white)](DEPLOY-GUIDE.md)
+[![Contributing](https://img.shields.io/badge/Contributing-Guide-6C63FF?style=for-the-badge)](CONTRIBUTING.md)
+[![GitHub Stars](https://img.shields.io/github/stars/DevAryanSin/BeaconBRD?style=for-the-badge&logo=github&color=f59e0b)](https://github.com/DevAryanSin/BeaconBRD)
+
+<sub>Built with ❤️ for HackFest 2.0 · Powered by **Groq** · **Next.js** · **FastAPI** · **Firebase**</sub>
+
+</div>
+
+<!-- Original footer preserved below -->
 <!-- <div align="center">
 
 Built with love for HackFest 2.0

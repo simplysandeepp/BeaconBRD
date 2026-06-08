@@ -15,8 +15,10 @@ import {
     Download,
     FileText,
     LayoutDashboard,
+    Loader2,
     LogOut,
     Menu,
+    Pencil,
     Plus,
     Settings,
     User,
@@ -69,25 +71,79 @@ function getNavStatus(stageIndex: number, stages: StageInfo[]): "complete" | "ru
 
 function SessionSelector({ onNewBRD }: { onNewBRD: () => void }) {
     const [open, setOpen] = useState(false);
+    const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [renameValue, setRenameValue] = useState("");
+    const [renameLoading, setRenameLoading] = useState(false);
     const [hasHydrated, setHasHydrated] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
-    const { sessions, activeSessionId, setActive } = useSessionStore();
+    const renameInputRef = useRef<HTMLInputElement>(null);
+    const { sessions, activeSessionId, setActive, renameSession } = useSessionStore();
+    const { user } = useAuth();
 
     useEffect(() => {
         setHasHydrated(true);
         const onMouseDown = (e: MouseEvent) => {
             if (ref.current && !ref.current.contains(e.target as Node)) {
                 setOpen(false);
+                setRenamingId(null);
             }
         };
         document.addEventListener("mousedown", onMouseDown);
         return () => document.removeEventListener("mousedown", onMouseDown);
     }, []);
 
+    useEffect(() => {
+        if (renamingId !== null) {
+            // Focus the input after render
+            setTimeout(() => renameInputRef.current?.focus(), 50);
+        }
+    }, [renamingId]);
+
     const active = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
     if (!hasHydrated || !active) {
         return <div className="w-full h-[46px] rounded-lg bg-white/5 animate-pulse" />;
     }
+
+    const startRename = (e: React.MouseEvent, sess: typeof active) => {
+        e.stopPropagation();
+        setRenamingId(sess.id);
+        setRenameValue(sess.name);
+    };
+
+    const commitRename = async (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (!renamingId || !renameValue.trim() || !user) return;
+        const trimmed = renameValue.trim();
+        const current = sessions.find((s) => s.id === renamingId);
+        if (current && current.name === trimmed) {
+            setRenamingId(null);
+            return;
+        }
+        setRenameLoading(true);
+        try {
+            await renameSession(renamingId, user.uid, trimmed);
+        } catch {
+            // silently fail — keep old name
+        } finally {
+            setRenameLoading(false);
+            setRenamingId(null);
+        }
+    };
+
+    const cancelRename = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setRenamingId(null);
+    };
+
+    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            commitRename();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            setRenamingId(null);
+        }
+    };
 
     return (
         <div ref={ref} className="relative">
@@ -121,26 +177,72 @@ function SessionSelector({ onNewBRD }: { onNewBRD: () => void }) {
                     >
                         <div className="p-1.5 max-h-[240px] overflow-y-auto">
                             {sessions.map((sess) => (
-                                <button
-                                    key={sess.id}
-                                    onClick={() => {
-                                        setActive(sess.id);
-                                        setOpen(false);
-                                    }}
-                                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/6 text-left transition-colors"
-                                >
-                                    <div
-                                        className={cn(
-                                            "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                                            sess.status === "active" || sess.status === "draft" ? "bg-emerald-400" : "bg-zinc-600"
-                                        )}
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-xs text-zinc-200 truncate">{sess.name}</p>
-                                        <p className="text-[10px] text-zinc-600 font-mono">{sess.id}</p>
-                                    </div>
-                                    {sess.id === active.id && <Check size={11} className="text-zinc-300 flex-shrink-0" />}
-                                </button>
+                                <div key={sess.id} className="relative group/item">
+                                    {renamingId === sess.id ? (
+                                        /* ── Inline rename input ── */
+                                        <div className="flex items-center gap-1.5 px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                ref={renameInputRef}
+                                                type="text"
+                                                value={renameValue}
+                                                onChange={(e) => setRenameValue(e.target.value)}
+                                                onKeyDown={handleRenameKeyDown}
+                                                disabled={renameLoading}
+                                                className="flex-1 min-w-0 text-xs bg-white/8 border border-white/15 rounded-md px-2 py-1.5 text-zinc-100 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 disabled:opacity-50"
+                                                placeholder="Session name"
+                                                maxLength={80}
+                                            />
+                                            <button
+                                                onClick={commitRename}
+                                                disabled={renameLoading || !renameValue.trim()}
+                                                className="w-6 h-6 rounded-md bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/25 transition-colors flex-shrink-0 disabled:opacity-40"
+                                                title="Save"
+                                            >
+                                                {renameLoading ? (
+                                                    <Loader2 size={10} className="animate-spin" />
+                                                ) : (
+                                                    <Check size={10} />
+                                                )}
+                                            </button>
+                                            <button
+                                                onClick={cancelRename}
+                                                disabled={renameLoading}
+                                                className="w-6 h-6 rounded-md bg-white/5 border border-white/10 flex items-center justify-center text-zinc-400 hover:bg-white/10 transition-colors flex-shrink-0 disabled:opacity-40"
+                                                title="Cancel"
+                                            >
+                                                <X size={10} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* ── Default session row ── */
+                                        <button
+                                            onClick={() => {
+                                                setActive(sess.id);
+                                                setOpen(false);
+                                            }}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/6 text-left transition-colors group/row"
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                                    sess.status === "active" || sess.status === "draft" ? "bg-emerald-400" : "bg-zinc-600"
+                                                )}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-zinc-200 truncate">{sess.name}</p>
+                                                <p className="text-[10px] text-zinc-600 font-mono">{sess.id}</p>
+                                            </div>
+                                            {sess.id === active.id && <Check size={11} className="text-zinc-300 flex-shrink-0" />}
+                                            <span
+                                                onClick={(e) => startRename(e, sess)}
+                                                className="opacity-0 group-hover/row:opacity-100 p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-all flex-shrink-0"
+                                                title="Rename session"
+                                            >
+                                                <Pencil size={10} />
+                                            </span>
+                                        </button>
+                                    )}
+                                </div>
                             ))}
                         </div>
 

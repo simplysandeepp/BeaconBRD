@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
     AlertCircle,
     ArrowRight,
@@ -11,13 +11,16 @@ import {
     File,
     FileText,
     Loader2,
+    Pencil,
     Table2,
+    X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { exportBRD, getBRD, getChunks, type ExportFormat } from "@/lib/apiClient";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useBRDStore } from "@/store/useBRDStore";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CheckItem {
     id: string;
@@ -80,8 +83,9 @@ function countGeneratedSections(sections: Record<string, string | undefined>): {
 }
 
 export default function ExportPage() {
-    const { activeSessionId, sessions } = useSessionStore();
+    const { activeSessionId, sessions, renameSession } = useSessionStore();
     const { acknowledgedFlagKeys } = useBRDStore();
+    const { user } = useAuth();
     const sessionId = activeSessionId ?? "";
     const activeSession = sessions.find((s) => s.id === sessionId);
 
@@ -89,6 +93,41 @@ export default function ExportPage() {
     const [proceedAnyway, setProceedAnyway] = useState(false);
     const [downloading, setDownloading] = useState<ExportFormat | null>(null);
     const [exportError, setExportError] = useState<string | null>(null);
+
+    // ── Rename modal state ──
+    const [renameOpen, setRenameOpen] = useState(false);
+    const [renameValue, setRenameValue] = useState("");
+    const [renameLoading, setRenameLoading] = useState(false);
+    const renameInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (renameOpen) {
+            setTimeout(() => renameInputRef.current?.focus(), 50);
+        }
+    }, [renameOpen]);
+
+    const openRename = () => {
+        setRenameValue(activeSession?.name ?? "");
+        setRenameOpen(true);
+    };
+
+    const commitRename = async () => {
+        if (!renameValue.trim() || !user || !sessionId) return;
+        const trimmed = renameValue.trim();
+        if (activeSession && activeSession.name === trimmed) {
+            setRenameOpen(false);
+            return;
+        }
+        setRenameLoading(true);
+        try {
+            await renameSession(sessionId, user.uid, trimmed);
+            setRenameOpen(false);
+        } catch {
+            // silently fail
+        } finally {
+            setRenameLoading(false);
+        }
+    };
 
     const [chunksTotal, setChunksTotal] = useState(0);
     const [flagsTotal, setFlagsTotal] = useState(0);
@@ -177,9 +216,9 @@ export default function ExportPage() {
             {
                 id: "c5",
                 label: "Session name set",
-                description: hasSessionName ? `Session name: "${activeSession?.name}"` : "Session still uses default name.",
+                description: hasSessionName ? `Session name: "${activeSession?.name}"` : "Session still uses default name — click Fix Now to rename.",
                 status: hasSessionName ? "ok" : "warn",
-                fixHref: "/dashboard",
+                fixHref: undefined, // handled by inline rename modal
             },
         ];
     }, [activeSession?.name, chunksTotal, generatedSections, insufficientSections, highFlags, humanEditedSections]);
@@ -260,12 +299,21 @@ export default function ExportPage() {
                                 <p className="text-sm font-medium text-zinc-200">{item.label}</p>
                                 <p className="text-xs text-zinc-500 mt-0.5">{item.description}</p>
                             </div>
-                            {item.fixHref && item.status !== "ok" && (
-                                <Link href={item.fixHref}>
-                                    <button className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 flex-shrink-0 transition-colors">
-                                        Fix Now <ArrowRight size={11} />
+                            {item.status !== "ok" && (
+                                item.fixHref ? (
+                                    <Link href={item.fixHref}>
+                                        <button className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 flex-shrink-0 transition-colors">
+                                            Fix Now <ArrowRight size={11} />
+                                        </button>
+                                    </Link>
+                                ) : (
+                                    <button
+                                        onClick={openRename}
+                                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 flex-shrink-0 transition-colors"
+                                    >
+                                        <Pencil size={10} /> Rename
                                     </button>
-                                </Link>
+                                )
                             )}
                         </motion.div>
                     ))}
@@ -381,6 +429,99 @@ export default function ExportPage() {
                     </p>
                 </div>
             </motion.div>
+
+            {/* ── Rename Session Modal ── */}
+            <AnimatePresence>
+                {renameOpen && (
+                    <>
+                        <motion.div
+                            key="rename-backdrop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.18 }}
+                            className="fixed inset-0 z-50"
+                            style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
+                            onClick={() => setRenameOpen(false)}
+                        />
+                        <motion.div
+                            key="rename-modal"
+                            initial={{ opacity: 0, scale: 0.92, y: 16 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.92, y: 16 }}
+                            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                        >
+                            <div
+                                className="relative w-full max-w-sm rounded-2xl p-6 pointer-events-auto"
+                                style={{
+                                    background: "rgba(10,10,10,0.98)",
+                                    border: "1px solid rgba(255,255,255,0.10)",
+                                    boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+                                }}
+                            >
+                                <button
+                                    onClick={() => setRenameOpen(false)}
+                                    className="absolute top-4 right-4 w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-white/6 transition-all"
+                                >
+                                    <X size={14} />
+                                </button>
+
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div
+                                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
+                                    >
+                                        <Pencil size={16} className="text-zinc-200" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-base font-bold text-white leading-tight">Rename Session</h2>
+                                        <p className="text-xs text-zinc-600 mt-0.5">Give your session a meaningful name</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5 mb-5">
+                                    <label className="block text-xs font-medium text-zinc-400">Session name</label>
+                                    <input
+                                        ref={renameInputRef}
+                                        type="text"
+                                        value={renameValue}
+                                        onChange={(e) => setRenameValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+                                            if (e.key === "Escape") { e.preventDefault(); setRenameOpen(false); }
+                                        }}
+                                        disabled={renameLoading}
+                                        className="glass-input w-full px-3.5 py-2.5 text-sm disabled:opacity-50"
+                                        placeholder="e.g. Q2 Product BRD, Checkout Redesign…"
+                                        maxLength={80}
+                                    />
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={commitRename}
+                                        disabled={!renameValue.trim() || renameLoading || !user}
+                                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-white text-zinc-900 hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-[0_2px_16px_rgba(255,255,255,0.10)]"
+                                    >
+                                        {renameLoading ? (
+                                            <><Loader2 size={14} className="animate-spin" /> Saving…</>
+                                        ) : (
+                                            "Save Name"
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => setRenameOpen(false)}
+                                        className="px-4 py-2.5 rounded-xl text-sm text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

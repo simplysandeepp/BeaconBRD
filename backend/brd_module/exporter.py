@@ -23,6 +23,8 @@ try:
     from docx import Document
     from docx.shared import Pt, RGBColor, Inches
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
     PYTHON_DOCX_AVAILABLE = True
 except ImportError:
     PYTHON_DOCX_AVAILABLE = False
@@ -519,43 +521,73 @@ def export_brd_to_docx(session_id: str, output_file: str = None, title: str = "B
     return docx_bytes_content
 
 
+def _strip_markdown(text: str) -> str:
+    """
+    Strip markdown formatting from text, returning plain text.
+    Used for template-based DOCX export where the template handles formatting.
+    """
+    # Remove headings (## ...)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Remove bold (**text**)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    # Remove italic (*text*)
+    text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'\1', text)
+    # Remove bold+italic (***text***)
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', text)
+    # Remove inline code (`text`)
+    text = re.sub(r'`(.+?)`', r'\1', text)
+    # Remove strikethrough (~~text~~)
+    text = re.sub(r'~~(.+?)~~', r'\1', text)
+    # Remove links [text](url) → text
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    # Remove blockquote markers
+    text = re.sub(r'^>\s?', '', text, flags=re.MULTILINE)
+    # Remove horizontal rules
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    # Remove list markers
+    text = re.sub(r'^[-*+]\s', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\d+\.\s', '', text, flags=re.MULTILINE)
+    return text
+
+
 def _fill_docx_template(template_path: str, session_id: str, title: str, sections: dict) -> Document:
     """
     Fill a DOCX template with BRD content.
-    
+
     Replaces placeholders in the template with actual content.
-    
+    Markdown formatting is stripped since the template handles its own formatting.
+
     Args:
         template_path: Path to the template DOCX file
         session_id: Session identifier
         title: Document title
         sections: Dictionary of BRD sections
-        
+
     Returns:
         Filled Document object
     """
     doc = Document(template_path)
-    
-    # Prepare replacement dictionary
+
+    # Prepare replacement dictionary (strip markdown for template-based export)
     replacements = {
         '{TITLE}': title,
         '{SESSION_ID}': session_id,
         '{GENERATED_DATE}': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
-        '{EXECUTIVE_SUMMARY}': sections.get('executive_summary', '(Not generated)'),
-        '{FUNCTIONAL_REQUIREMENTS}': sections.get('functional_requirements', '(Not generated)'),
-        '{STAKEHOLDER_ANALYSIS}': sections.get('stakeholder_analysis', '(Not generated)'),
-        '{TIMELINE}': sections.get('timeline', '(Not generated)'),
-        '{DECISIONS}': sections.get('decisions', '(Not generated)'),
-        '{ASSUMPTIONS}': sections.get('assumptions', '(Not generated)'),
-        '{SUCCESS_METRICS}': sections.get('success_metrics', '(Not generated)'),
+        '{EXECUTIVE_SUMMARY}': _strip_markdown(sections.get('executive_summary', '(Not generated)')),
+        '{FUNCTIONAL_REQUIREMENTS}': _strip_markdown(sections.get('functional_requirements', '(Not generated)')),
+        '{STAKEHOLDER_ANALYSIS}': _strip_markdown(sections.get('stakeholder_analysis', '(Not generated)')),
+        '{TIMELINE}': _strip_markdown(sections.get('timeline', '(Not generated)')),
+        '{DECISIONS}': _strip_markdown(sections.get('decisions', '(Not generated)')),
+        '{ASSUMPTIONS}': _strip_markdown(sections.get('assumptions', '(Not generated)')),
+        '{SUCCESS_METRICS}': _strip_markdown(sections.get('success_metrics', '(Not generated)')),
     }
-    
+
     # Replace in paragraphs
     for paragraph in doc.paragraphs:
         for key, value in replacements.items():
             if key in paragraph.text:
                 paragraph.text = paragraph.text.replace(key, str(value))
-    
+
     # Replace in tables
     for table in doc.tables:
         for row in table.rows:
@@ -564,40 +596,179 @@ def _fill_docx_template(template_path: str, session_id: str, title: str, section
                     for key, value in replacements.items():
                         if key in paragraph.text:
                             paragraph.text = paragraph.text.replace(key, str(value))
-    
+
     return doc
+
+
+def _process_inline_text(para, text: str) -> None:
+    """
+    Process inline markdown text and add formatted runs to a paragraph.
+    Uses a token-based approach to handle nested formatting.
+    """
+    tokens = []  # list of (start, end, type, content)
+
+    # Find all formatting markers
+    # Bold+italic: ***text***
+    for m in re.finditer(r'\*\*\*(.+?)\*\*\*', text, re.DOTALL):
+        tokens.append((m.start(), m.end(), 'bold_italic', m.group(1)))
+
+    # Bold: **text** (but not if already part of bold_italic)
+    for m in re.finditer(r'\*\*(.+?)\*\*', text, re.DOTALL):
+        # Check if this overlaps with any bold_italic token
+        overlap = any(t[0] <= m.start() < t[1] or t[0] < m.end() <= t[1] for t in tokens if t[2] == 'bold_italic')
+        if not overlap:
+            tokens.append((m.start(), m.end(), 'bold', m.group(1)))
+
+    # Italic: *text* (but not if already part of bold or bold_italic)
+    for m in re.finditer(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', text, re.DOTALL):
+        overlap = any(t[0] <= m.start() < t[1] or t[0] < m.end() <= t[1] for t in tokens if t[2] in ('bold', 'bold_italic'))
+        if not overlap:
+            tokens.append((m.start(), m.end(), 'italic', m.group(1)))
+
+    # Inline code: `text`
+    for m in re.finditer(r'`(.+?)`', text, re.DOTALL):
+        overlap = any(t[0] <= m.start() < t[1] or t[0] < m.end() <= t[1] for t in tokens)
+        if not overlap:
+            tokens.append((m.start(), m.end(), 'code', m.group(1)))
+
+    # Strikethrough: ~~text~~
+    for m in re.finditer(r'~~(.+?)~~', text, re.DOTALL):
+        overlap = any(t[0] <= m.start() < t[1] or t[0] < m.end() <= t[1] for t in tokens)
+        if not overlap:
+            tokens.append((m.start(), m.end(), 'strikethrough', m.group(1)))
+
+    # Links: [text](url)
+    for m in re.finditer(r'\[([^\]]+)\]\(([^)]+)\)', text):
+        overlap = any(t[0] <= m.start() < t[1] or t[0] < m.end() <= t[1] for t in tokens)
+        if not overlap:
+            tokens.append((m.start(), m.end(), 'link', (m.group(1), m.group(2))))
+
+    if not tokens:
+        # No formatting found, just add plain text
+        if text.strip():
+            para.add_run(text)
+        return
+
+    # Sort tokens by start position
+    tokens.sort(key=lambda t: t[0])
+
+    # Build runs from text segments
+    pos = 0
+    for start, end, fmt_type, content in tokens:
+        # Add plain text before this token
+        if start > pos:
+            plain = text[pos:start]
+            if plain:
+                para.add_run(plain)
+
+        # Add formatted run
+        if fmt_type == 'bold':
+            run = para.add_run(content)
+            run.bold = True
+        elif fmt_type == 'italic':
+            run = para.add_run(content)
+            run.italic = True
+        elif fmt_type == 'bold_italic':
+            run = para.add_run(content)
+            run.bold = True
+            run.italic = True
+        elif fmt_type == 'code':
+            run = para.add_run(content)
+            run.font.name = 'Consolas'
+            run.font.size = Pt(9)
+            run.font.color.rgb = RGBColor(0xD6, 0x33, 0x84)
+        elif fmt_type == 'strikethrough':
+            run = para.add_run(content)
+            run.font.strikethrough = True
+        elif fmt_type == 'link':
+            link_text, url = content
+            run = para.add_run(f"{link_text} ({url})")
+            run.font.color.rgb = RGBColor(0x00, 0x56, 0xB3)
+            run.underline = True
+
+        pos = end
+
+    # Add any remaining text after the last token
+    if pos < len(text):
+        para.add_run(text[pos:])
 
 
 def _create_docx_from_scratch(session_id: str, title: str, sections: dict) -> Document:
     """
     Create a DOCX document from scratch (when template not available).
-    
+
+    Properly parses markdown formatting including:
+    - Headings (# through ######)
+    - Bold (**text**), Italic (*text*), Bold+Italic (***text***)
+    - Inline code (`code`), Strikethrough (~~text~~)
+    - Links ([text](url))
+    - Unordered lists (-, *) and ordered lists (1. 2. 3.)
+    - Blockquotes (>)
+    - Code blocks (``` ... ```)
+    - Horizontal rules (---)
+    - Tables (| col1 | col2 |)
+
     Args:
         session_id: Session identifier
         title: Document title
         sections: Dictionary of BRD sections
-        
+
     Returns:
         Document object
     """
     doc = Document()
-    
-    # Title
+
+    # ── Title ──
     title_para = doc.add_heading(title, level=1)
     title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    # Metadata
-    metadata = doc.add_paragraph()
-    metadata.add_run(f"Generated: ").bold = True
-    metadata.add_run(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'))
-    
-    metadata = doc.add_paragraph()
-    metadata.add_run(f"Session ID: ").bold = True
-    metadata.add_run(session_id)
-    
+
+    # ── Metadata ──
+    meta_para = doc.add_paragraph()
+    meta_para.add_run("Generated: ").bold = True
+    meta_para.add_run(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'))
+
+    meta_para2 = doc.add_paragraph()
+    meta_para2.add_run("Session ID: ").bold = True
+    meta_para2.add_run(session_id)
+
     doc.add_paragraph()  # Spacing
-    
-    # Sections
+
+    # ── Validation Flags ──
+    conn, db_type = get_connection()
+    flags = []
+    try:
+        cur = conn.cursor()
+        query = """
+            SELECT section_name, flag_type, severity, description
+            FROM brd_validation_flags
+            WHERE session_id = %s
+            ORDER BY severity DESC
+        """
+        if db_type == "sqlite":
+            query = query.replace("%s", "?")
+        cur.execute(query, (session_id,))
+        flags = cur.fetchall()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+    if flags:
+        doc.add_heading("Validation Flags Required Review", level=2)
+        doc.add_paragraph(
+            "The AI has detected potential issues that require human review before finalization.",
+            style='Intense Quote'
+        )
+        for flag in flags:
+            section, f_type, severity, desc = flag
+            icon = "🔴" if severity == "high" else ("🟡" if severity == "medium" else "🔵")
+            flag_para = doc.add_paragraph()
+            flag_para.add_run(f"{icon} [{severity.upper()}] ").bold = True
+            flag_para.add_run(f"{section.replace('_', ' ').title()} ({f_type}): ").bold = True
+            flag_para.add_run(desc)
+        doc.add_paragraph()  # Spacing
+
+    # ── Sections ──
     section_order = [
         ("executive_summary", "1. Executive Summary"),
         ("functional_requirements", "2. Functional Requirements"),
@@ -607,14 +778,195 @@ def _create_docx_from_scratch(session_id: str, title: str, sections: dict) -> Do
         ("assumptions", "6. Assertions & Assumptions"),
         ("success_metrics", "7. Success Metrics")
     ]
-    
+
     for db_key, display_title in section_order:
         doc.add_heading(display_title, level=2)
         content = sections.get(db_key, "*(Section not generated)*")
-        
-        # Add content with basic formatting
-        for line in content.split('\n'):
-            if line.strip():
-                doc.add_paragraph(line, style='List Bullet' if line.startswith('-') else 'Normal')
-    
+
+        # Parse the markdown content line by line with context awareness
+        _add_markdown_content(doc, content)
+
     return doc
+
+
+def _add_markdown_content(doc, content: str) -> None:
+    """
+    Parse a markdown content string and add it to the DOCX document with proper formatting.
+
+    Handles multi-line constructs like code blocks, tables, and blockquotes.
+    """
+    lines = content.split('\n')
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # ── Empty line ──
+        if not stripped:
+            i += 1
+            continue
+
+        # ── Horizontal rule ──
+        if re.match(r'^-{3,}$|^_{3,}$|^\*{3,}$', stripped):
+            # Add a horizontal line (bottom border on a paragraph)
+            para = doc.add_paragraph()
+            para.paragraph_format.space_before = Pt(6)
+            para.paragraph_format.space_after = Pt(6)
+            # Add bottom border to simulate hr
+            pPr = para._element.get_or_add_pPr()
+            pBdr = OxmlElement('w:pBdr')
+            bottom = OxmlElement('w:bottom')
+            bottom.set(qn('w:val'), 'single')
+            bottom.set(qn('w:sz'), '6')
+            bottom.set(qn('w:space'), '1')
+            bottom.set(qn('w:color'), '0056B3')
+            pBdr.append(bottom)
+            pPr.append(pBdr)
+            i += 1
+            continue
+
+        # ── Code block (``` ... ```) ──
+        if stripped.startswith('```'):
+            code_lines = []
+            i += 1  # Skip the opening ```
+            while i < len(lines) and not lines[i].strip().startswith('```'):
+                code_lines.append(lines[i])
+                i += 1
+            i += 1  # Skip the closing ```
+
+            # Add code block as a styled paragraph
+            for code_line in code_lines:
+                para = doc.add_paragraph()
+                para.paragraph_format.space_before = Pt(0)
+                para.paragraph_format.space_after = Pt(0)
+                # Set shading for code background
+                shading = OxmlElement('w:shd')
+                shading.set(qn('w:fill'), 'F5F5F5')
+                shading.set(qn('w:val'), 'clear')
+                para._element.get_or_add_pPr().append(shading)
+                run = para.add_run(code_line)
+                run.font.name = 'Consolas'
+                run.font.size = Pt(9)
+                run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+            continue
+
+        # ── Headings (# through ######) ──
+        heading_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            heading_text = heading_match.group(2)
+            # DOCX heading levels: 1-9, map markdown h1-h6 to docx h3-h8
+            # (h1 and h2 are already used for document title and section titles)
+            docx_level = min(level + 2, 9)
+            doc.add_heading(heading_text, level=docx_level)
+            i += 1
+            continue
+
+        # ── Blockquote ──
+        if stripped.startswith('>'):
+            quote_text = re.sub(r'^>\s?', '', stripped)
+            para = doc.add_paragraph(style='Intense Quote')
+            _process_inline_text(para, quote_text)
+            i += 1
+            continue
+
+        # ── Table ──
+        if '|' in stripped and re.match(r'^\|', stripped):
+            # Collect all table rows
+            table_rows = []
+            while i < len(lines) and '|' in lines[i].strip():
+                row_line = lines[i].strip()
+                # Skip separator rows (|---|---|)
+                if re.match(r'^[\s|:-]+$', row_line) and not re.search(r'[^\s|:-]', row_line):
+                    i += 1
+                    continue
+                # Parse cells
+                cells = [c.strip() for c in row_line.strip('|').split('|')]
+                table_rows.append(cells)
+                i += 1
+
+            if table_rows:
+                # Determine max columns
+                max_cols = max(len(row) for row in table_rows)
+                # Normalize row lengths
+                for row in table_rows:
+                    while len(row) < max_cols:
+                        row.append('')
+
+                # Create table
+                table = doc.add_table(rows=len(table_rows), cols=max_cols)
+                table.style = 'Table Grid'
+
+                for r_idx, row_data in enumerate(table_rows):
+                    for c_idx, cell_text in enumerate(row_data):
+                        cell = table.cell(r_idx, c_idx)
+                        cell.text = ''  # Clear default
+                        # Header row gets bold
+                        if r_idx == 0:
+                            run = cell.paragraphs[0].add_run(cell_text)
+                            run.bold = True
+                            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                            # Set header background
+                            shading = OxmlElement('w:shd')
+                            shading.set(qn('w:fill'), '0056B3')
+                            shading.set(qn('w:val'), 'clear')
+                            cell._element.get_or_add_tcPr().append(shading)
+                        else:
+                            _process_inline_text(cell.paragraphs[0], cell_text)
+                            # Alternating row color
+                            if r_idx % 2 == 0:
+                                shading = OxmlElement('w:shd')
+                                shading.set(qn('w:fill'), 'F9F9F9')
+                                shading.set(qn('w:val'), 'clear')
+                                cell._element.get_or_add_tcPr().append(shading)
+
+                doc.add_paragraph()  # Spacing after table
+            continue
+
+        # ── Unordered list item ──
+        if re.match(r'^[-*+]\s', stripped):
+            # Collect consecutive list items
+            list_items = []
+            while i < len(lines):
+                s = lines[i].strip()
+                if re.match(r'^[-*+]\s', s):
+                    item_text = re.sub(r'^[-*+]\s', '', s)
+                    list_items.append(item_text)
+                    i += 1
+                elif s.startswith('  ') and list_items:
+                    # Continuation of previous item
+                    list_items[-1] += ' ' + s.strip()
+                    i += 1
+                else:
+                    break
+
+            for item_text in list_items:
+                para = doc.add_paragraph(style='List Bullet')
+                _process_inline_text(para, item_text)
+            continue
+
+        # ── Ordered list item ──
+        if re.match(r'^\d+\.\s', stripped):
+            list_items = []
+            while i < len(lines):
+                s = lines[i].strip()
+                if re.match(r'^\d+\.\s', s):
+                    item_text = re.sub(r'^\d+\.\s', '', s)
+                    list_items.append(item_text)
+                    i += 1
+                elif s.startswith('  ') and list_items:
+                    list_items[-1] += ' ' + s.strip()
+                    i += 1
+                else:
+                    break
+
+            for item_text in list_items:
+                para = doc.add_paragraph(style='List Number')
+                _process_inline_text(para, item_text)
+            continue
+
+        # ── Regular paragraph ──
+        para = doc.add_paragraph()
+        _process_inline_text(para, stripped)
+        i += 1
