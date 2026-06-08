@@ -188,7 +188,7 @@ function SessionSelector({ onNewBRD }: { onNewBRD: () => void }) {
                                                 onChange={(e) => setRenameValue(e.target.value)}
                                                 onKeyDown={handleRenameKeyDown}
                                                 disabled={renameLoading}
-                                                className="flex-1 min-w-0 text-xs bg-white/8 border border-white/15 rounded-md px-2 py-1.5 text-zinc-100 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 disabled:opacity-50"
+                                                className="flex-1 min-w-0 text-xs bg-zinc-800 border border-white/15 rounded-md px-2 py-1.5 text-zinc-100 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 disabled:opacity-50"
                                                 placeholder="Session name"
                                                 maxLength={80}
                                             />
