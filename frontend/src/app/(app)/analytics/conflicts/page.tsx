@@ -80,7 +80,7 @@ export default function ConflictsPage() {
                         </div>
 
                         <div className="space-y-4">
-                            <div className="bg-zinc-950/50 rounded-lg p-4 border border-white/5">
+                            <div className="bg-black/50 rounded-lg p-4 border border-white/5">
                                 <p className="text-zinc-400 text-xs mb-2">Requirement A</p>
                                 <p className="text-zinc-100">{conflict.requirement1}</p>
                                 <p className="text-cyan-400 text-sm mt-2">Source: {conflict.source1}</p>
@@ -90,7 +90,7 @@ export default function ConflictsPage() {
                                 <XCircle size={20} className="text-red-400" />
                             </div>
 
-                            <div className="bg-zinc-950/50 rounded-lg p-4 border border-white/5">
+                            <div className="bg-black/50 rounded-lg p-4 border border-white/5">
                                 <p className="text-zinc-400 text-xs mb-2">Requirement B</p>
                                 <p className="text-zinc-100">{conflict.requirement2}</p>
                                 <p className="text-cyan-400 text-sm mt-2">Source: {conflict.source2}</p>
@@ -98,7 +98,7 @@ export default function ConflictsPage() {
                         </div>
 
                         {!conflict.resolved && (
-                            <div className="mt-4 p-3 bg-zinc-950/50 rounded-lg border border-white/5">
+                            <div className="mt-4 p-3 bg-black/50 rounded-lg border border-white/5">
                                 <p className="text-zinc-400 text-sm">
                                     💡 <strong>Recommendation:</strong> Schedule a stakeholder alignment meeting to clarify the final requirement.
                                 </p>

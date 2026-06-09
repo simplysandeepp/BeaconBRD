@@ -28,8 +28,7 @@ export default function ForgotPasswordPage() {
 
     return (
         <div
-            className="min-h-screen flex items-center justify-center px-6"
-            style={{ background: 'var(--bg-base)' }}
+            className="min-h-screen flex items-center justify-center px-6 bg-black"
         >
             <div className="w-full max-w-md space-y-8">
                 <Link
@@ -54,7 +53,7 @@ export default function ForgotPasswordPage() {
 
                 <div
                     className="p-7 rounded-2xl border border-white/8"
-                    style={{ background: 'rgba(14,14,14,0.95)' }}
+                    style={{ background: 'rgba(0,0,0,0.95)' }}
                 >
                     {sent ? (
                         <div className="flex flex-col items-center gap-4 py-4">

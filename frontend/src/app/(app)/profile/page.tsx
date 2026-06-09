@@ -432,7 +432,7 @@ export default function ProfilePage() {
                                     name="name"
                                     required
                                     defaultValue={user?.name}
-                                    className="w-full px-3 py-2 bg-zinc-950 border border-white/10 rounded-lg text-zinc-100 placeholder-zinc-700 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
+                                    className="w-full px-3 py-2 bg-black border border-white/10 rounded-lg text-zinc-100 placeholder-zinc-700 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
                                     placeholder="Your name"
                                 />
                             </div>
@@ -443,7 +443,7 @@ export default function ProfilePage() {
                                     name="email"
                                     required
                                     defaultValue={user?.email}
-                                    className="w-full px-3 py-2 bg-zinc-950 border border-white/10 rounded-lg text-zinc-100 placeholder-zinc-700 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
+                                    className="w-full px-3 py-2 bg-black border border-white/10 rounded-lg text-zinc-100 placeholder-zinc-700 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
                                     placeholder="your@email.com"
                                 />
                             </div>

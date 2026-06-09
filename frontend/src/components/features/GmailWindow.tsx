@@ -441,7 +441,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                 <div className="flex-1 flex items-center gap-3">
                     {/* Increased search bar size */}
                     <div className="w-96 relative flex items-center">
-                        <form onSubmit={handleSearch} className="flex-1 flex items-center bg-zinc-950/40 border border-white/10 rounded-xl px-4 py-2 hover:border-white/20 focus-within:border-cyan-500/50 focus-within:bg-zinc-950/60 transition-all">
+                        <form onSubmit={handleSearch} className="flex-1 flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-2 hover:border-white/20 focus-within:border-cyan-500/50 focus-within:bg-black/60 transition-all">
                             <Search size={18} className="text-zinc-500 mr-3" />
                             <input 
                                 type="text" 
@@ -465,7 +465,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                     {/* Bigger from and to forms */}
                     <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2">
                         {/* FROM Input Box */}
-                        <div className="flex-1 flex items-center flex-wrap bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-1.5 gap-1.5 focus-within:border-cyan-500/50 hover:border-white/20 transition-all min-h-[38px]">
+                        <div className="flex-1 flex items-center flex-wrap bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 gap-1.5 focus-within:border-cyan-500/50 hover:border-white/20 transition-all min-h-[38px]">
                             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/10 pr-2 mr-1">From</span>
                             <div className="flex flex-wrap gap-1.5 items-center flex-1">
                                 {fromMails.map((mail, idx) => (
@@ -516,7 +516,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                         </div>
 
                         {/* TO Input Box */}
-                        <div className="flex-1 flex items-center flex-wrap bg-zinc-950/40 border border-white/10 rounded-xl px-3 py-1.5 gap-1.5 focus-within:border-cyan-500/50 hover:border-white/20 transition-all min-h-[38px]">
+                        <div className="flex-1 flex items-center flex-wrap bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 gap-1.5 focus-within:border-cyan-500/50 hover:border-white/20 transition-all min-h-[38px]">
                             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/10 pr-2 mr-1">To</span>
                             <div className="flex flex-wrap gap-1.5 items-center flex-1">
                                 {toMails.map((mail, idx) => (
@@ -592,7 +592,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="absolute inset-0 z-40 bg-zinc-950/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
+                            className="absolute inset-0 z-40 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
                         >
                             <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
                                 <GmailLogo className="w-10 h-10" />
@@ -615,7 +615,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                 <motion.div 
                     animate={{ width: sidebarCollapsed ? 64 : 260 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="border-r border-white/5 flex flex-col overflow-hidden relative group/sidebar bg-zinc-950/20"
+                    className="border-r border-white/5 flex flex-col overflow-hidden relative group/sidebar bg-black/20"
                 >
                     <div className="p-4 flex items-center">
                         <button 
@@ -653,7 +653,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                     </div>
 
                     {/* Bottom Profile Area */}
-                    <div className="p-4 border-t border-white/5 bg-zinc-950/40 flex items-center gap-3 mt-auto">
+                    <div className="p-4 border-t border-white/5 bg-black/40 flex items-center gap-3 mt-auto">
                         {profile ? (
                             <>
                                 <img 
@@ -684,7 +684,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                 </motion.div>
 
                 {/* Main Content Area */}
-                <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20">
+                <div className="flex-1 flex flex-col min-w-0 bg-black/20">
                     <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between">
                         <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono">
                             <span className="mr-2">
@@ -722,9 +722,9 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: -20 }}
-                                    className="absolute inset-0 bg-zinc-950 flex flex-col"
+                                    className="absolute inset-0 bg-black flex flex-col"
                                 >
-                                    <div className="flex items-center gap-4 px-6 py-4 border-b border-white/5 sticky top-0 bg-zinc-950 z-10">
+                                    <div className="flex items-center gap-4 px-6 py-4 border-b border-white/5 sticky top-0 bg-black z-10">
                                         <button onClick={() => setViewMode('list')} className="p-2 hover:bg-white/10 rounded-full text-zinc-400">
                                             <ArrowLeft size={18} />
                                         </button>

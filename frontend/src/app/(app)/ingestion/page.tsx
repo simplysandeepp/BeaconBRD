@@ -1008,7 +1008,7 @@ export default function IngestionPage() {
                                 <p className="text-xs text-zinc-500">No suppressed chunks found for this session.</p>
                             ) : (
                                 suppressedSignals.slice(0, 8).map((chunk) => (
-                                    <div key={chunk.chunk_id} className="rounded-lg border border-white/10 bg-zinc-950/40 p-3">
+                                    <div key={chunk.chunk_id} className="rounded-lg border border-white/10 bg-black/40 p-3">
                                         <div className="flex items-start gap-2">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-xs text-zinc-300">

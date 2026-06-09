@@ -72,8 +72,7 @@ export default function InvitePage({ params }: InvitePageProps) {
 
     return (
         <div
-            className="min-h-screen flex items-center justify-center px-6"
-            style={{ background: 'var(--bg-base)' }}
+            className="min-h-screen flex items-center justify-center px-6 bg-black"
         >
             <div className="w-full max-w-md space-y-6">
                 {/* Logo */}
@@ -86,7 +85,7 @@ export default function InvitePage({ params }: InvitePageProps) {
 
                 <div
                     className="p-8 rounded-2xl border border-white/8 space-y-6"
-                    style={{ background: 'rgba(14,14,14,0.95)' }}
+                    style={{ background: 'rgba(0,0,0,0.95)' }}
                 >
                     {/* Loading */}
                     {(status === 'loading' || authLoading) && (

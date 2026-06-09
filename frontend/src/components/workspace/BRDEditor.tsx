@@ -151,7 +151,7 @@ export default function BRDEditor({ projectId }: { projectId: string }) {
                             {[...sectionFlags, ...globalFlags].map((flag, index) => (
                                 <div
                                     key={`${flag.section_name}-${index}`}
-                                    className="p-3 bg-zinc-950/50 rounded-lg border border-white/5"
+                                    className="p-3 bg-black/50 rounded-lg border border-white/5"
                                 >
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="text-[10px] text-zinc-500 uppercase">{flag.flag_type}</span>

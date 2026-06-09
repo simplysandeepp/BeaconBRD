@@ -61,8 +61,7 @@ export default function RegisterPage() {
 
     return (
         <div
-            className="min-h-screen flex items-center justify-center px-6 py-12"
-            style={{ background: 'var(--bg-base)' }}
+            className="min-h-screen flex items-center justify-center px-6 py-12 bg-black"
         >
             <div className="w-full max-w-md space-y-8">
 
@@ -94,7 +93,7 @@ export default function RegisterPage() {
                 <form
                     onSubmit={handleSubmit}
                     className="space-y-4 p-7 rounded-2xl border border-white/8"
-                    style={{ background: 'rgba(14,14,14,0.96)' }}
+                    style={{ background: 'rgba(0,0,0,0.96)' }}
                 >
                     {error && (
                         <div className="bg-red-500/8 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">
