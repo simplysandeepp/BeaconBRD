@@ -60,3 +60,5 @@ emails.csv
 emails.csv/
 emails.csv
 
+# Service account
+service-account.json
