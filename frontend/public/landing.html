@@ -11,6 +11,42 @@
 	
 	
 	<style>#__framer-editorbar-container,.framer-13yxzio,.framer-19yaanm,.framer-1kflzx5,.framer-hcsc7{display:none!important}</style>
+		<style>
+			/* Suppress Framer editor/on-page-editing elements when embedded in iframe */
+			[data-framer-editor-bar],
+			.framer-editor-bar,
+			div[id*="framer-editor"],
+			div[class*="EditorBar"],
+			div[class*="editor-bar"],
+			div[class*="framer-"][class*="editor"],
+			iframe[src*="framer.com/editor"] {
+				display: none !important;
+				visibility: hidden !important;
+				opacity: 0 !important;
+				pointer-events: none !important;
+			}
+		</style>
+		<script>
+			/* Remove Framer editor elements that may be injected dynamically */
+			(function() {
+				var selectors = [
+					'#__framer-editorbar-container',
+					'[data-framer-editor-bar]',
+					'div[id*="framer-editor"]',
+					'div[class*="EditorBar"]',
+					'div[class*="editor-bar"]',
+					'iframe[src*="framer.com/editor"]'
+				];
+				function removeEditorElements() {
+					selectors.forEach(function(sel) {
+						document.querySelectorAll(sel).forEach(function(el) { el.remove(); });
+					});
+				}
+				window.addEventListener('load', removeEditorElements);
+				setTimeout(removeEditorElements, 500);
+				setTimeout(removeEditorElements, 2000);
+			})();
+		</script>
 <!-- Start of headStart -->
     
     <!-- End of headStart -->

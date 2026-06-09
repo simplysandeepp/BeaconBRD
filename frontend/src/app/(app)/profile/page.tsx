@@ -70,29 +70,26 @@ export default function ProfilePage() {
     const { user, updateUser } = useAuthStore();
 
     useEffect(() => {
-        if (typeof window !== "undefined" && window.opener) {
-            const gmailParam = searchParams.get("gmail");
-            const gmailReason = searchParams.get("reason");
-            if (gmailParam) {
-                window.opener.postMessage({
-                    type: "GMAIL_AUTH_COMPLETE",
-                    status: gmailParam,
-                    reason: gmailReason
-                }, window.location.origin);
-                window.close();
-            }
+        if (typeof window === "undefined") return;
+
+        const gmailParam = searchParams.get("gmail");
+        const gmailReason = searchParams.get("reason");
+
+        if (gmailParam) {
+            // Use BroadcastChannel to communicate auth result back to the
+            // opener.  This works regardless of iframe context, unlike
+            // window.opener.postMessage which breaks when the app is
+            // embedded in an iframe.
+            const channel = new BroadcastChannel("gmail_oauth");
+            channel.postMessage({
+                type: "GMAIL_AUTH_COMPLETE",
+                status: gmailParam,
+                reason: gmailReason,
+            });
+            channel.close();
+            window.close();
         }
     }, [searchParams]);
-
-    const isPopup = typeof window !== "undefined" && window.opener && searchParams.get("gmail");
-    if (isPopup) {
-        return (
-            <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
-                <Loader2 size={32} className="text-cyan-400 animate-spin mb-4" />
-                <p className="text-sm text-zinc-300 font-medium">Completing Gmail authentication...</p>
-            </div>
-        );
-    }
     const { integrations, updateIntegration } = useIntegrationStore();
     const { activeSessionId, sessions, setActive } = useSessionStore();
 
@@ -274,7 +271,13 @@ export default function ProfilePage() {
         setSlackError(null);
         try {
             const authUrl = await getSlackOAuthUrl();
-            window.location.href = authUrl;
+            // Use window.top to escape any iframe context (e.g. Framer landing page iframe)
+            // so that Slack's OAuth page is not blocked by X-Frame-Options: sameorigin
+            if (window.top) {
+                window.top.location.href = authUrl;
+            } else {
+                window.location.href = authUrl;
+            }
         } catch (e) {
             setSlackError(e instanceof Error ? e.message : "Failed to start Slack OAuth");
         }

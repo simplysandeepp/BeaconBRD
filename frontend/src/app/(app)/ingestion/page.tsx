@@ -212,7 +212,13 @@ export default function IngestionPage() {
     const startSlackConnect = async () => {
         try {
             const authUrl = await getSlackOAuthUrl();
-            window.location.href = authUrl;
+            // Use window.top to escape any iframe context (e.g. Framer landing page iframe)
+            // so that Slack's OAuth page is not blocked by X-Frame-Options: sameorigin
+            if (window.top) {
+                window.top.location.href = authUrl;
+            } else {
+                window.location.href = authUrl;
+            }
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to start Slack OAuth');
         }

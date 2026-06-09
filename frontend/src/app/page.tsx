@@ -1,20 +1,15 @@
+import dynamic from "next/dynamic";
+
+/**
+ * Landing page — renders the Framer-exported landing.html inside a
+ * full-viewport iframe.  All links inside the iframe are retargeted to
+ * `_top` (see _FramerFrame) so navigation escapes the iframe.
+ *
+ * The iframe component is dynamically imported with `ssr: false` to
+ * prevent hydration mismatches when the app is embedded in an iframe.
+ */
+const FramerFrame = dynamic(() => import("./_FramerFrame"), { ssr: false });
+
 export default function LandingPage() {
-    return (
-        <iframe
-            src="/landing.html"
-            style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                width: "100vw",
-                height: "100vh",
-                border: "none",
-                margin: 0,
-                padding: 0,
-                zIndex: 9999,
-                display: "block",
-            }}
-            title="Beacon — AI-Powered BRD Generator"
-        />
-    );
+    return <FramerFrame />;
 }
