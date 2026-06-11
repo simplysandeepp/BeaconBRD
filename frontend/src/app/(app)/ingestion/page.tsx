@@ -165,6 +165,25 @@ export default function IngestionPage() {
                 };
             })
             .filter((s): s is ActiveSource => s !== null),
+        // Gmail email attachments
+        ...selectedGmailEmails
+            .flatMap((emailId): ActiveSource[] => {
+                const em = gmailEmails.find((e) => e.message_id === emailId);
+                if (!em || !em.attachments) return [];
+                return em.attachments.map((att): ActiveSource => {
+                    const ext = (att.filename.split('.').pop() ?? '').toUpperCase();
+                    const attId = att.id || att.attachment_id || att.filename;
+                    return {
+                        id: `${emailId}-att-${attId}`,
+                        kind: 'file',
+                        name: att.filename,
+                        ext: ext || 'ATTACHMENT',
+                        status: gmailSyncedEmails.has(emailId) ? 'done' : 'queued',
+                        chunkCount: undefined,
+                        meta: { isAttachment: true, emailSubject: em.subject }
+                    };
+                });
+            }),
     ];
 
     const ensureSessionId = async (): Promise<string> => {
@@ -300,6 +319,12 @@ export default function IngestionPage() {
                 idsToIngest.forEach((id) => next.add(id));
                 return next;
             });
+            if (overrideIds) {
+                setSelectedGmailEmails((prev) => {
+                    const next = new Set([...prev, ...overrideIds]);
+                    return Array.from(next);
+                });
+            }
             await refreshReviewGate(sid);
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Gmail sync failed');
@@ -925,7 +950,13 @@ export default function IngestionPage() {
                                     </td>
                                     <td className="px-5 py-3.5 font-mono text-xs text-zinc-300">{src.chunkCount ?? '—'}</td>
                                     <td className="px-5 py-3.5">
-                                        {src.kind === 'file' && <span className="text-xs text-zinc-500 uppercase font-mono">{src.ext}</span>}
+                                        {src.kind === 'file' && (
+                                            src.meta?.isAttachment ? (
+                                                <span className="glass-badge bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold">GMAIL ATT.</span>
+                                            ) : (
+                                                <span className="text-xs text-zinc-500 uppercase font-mono">{src.ext}</span>
+                                            )
+                                        )}
                                         {src.kind === 'slack' && <span className="glass-badge bg-[#4A154B]/30 border border-[#4A154B]/40 text-[#e01e5a] text-[10px] font-bold">SLACK</span>}
                                         {src.kind === 'gmail' && <span className="glass-badge bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">GMAIL</span>}
                                     </td>
@@ -940,7 +971,7 @@ export default function IngestionPage() {
                                                     <Eye size={13} />
                                                 </button>
                                             )}
-                                            {src.kind === 'file' && (
+                                            {src.kind === 'file' && !src.meta?.isAttachment && (
                                                 <button
                                                     onClick={() => removeFile(src.name)}
                                                     className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -1127,7 +1158,18 @@ export default function IngestionPage() {
             {gmailReplicaOpen && (
                 <GmailReplica 
                     onClose={() => setGmailReplicaOpen(false)}
-                    onIngest={(ids, includeAtts) => {
+                    onIngest={(ids, includeAtts, selectedEmails) => {
+                        if (selectedEmails) {
+                            setGmailEmails(prev => {
+                                const merged = [...prev];
+                                selectedEmails.forEach(e => {
+                                    if (!merged.some(m => m.message_id === e.message_id)) {
+                                        merged.push(e);
+                                    }
+                                });
+                                return merged;
+                            });
+                        }
                         syncSelectedGmailEmails(ids, includeAtts);
                         setGmailReplicaOpen(false);
                     }}

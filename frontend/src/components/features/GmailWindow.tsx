@@ -19,7 +19,7 @@ import { getGmailCache, setGmailCache } from '@/lib/gmailCache';
 
 interface GmailReplicaProps {
     onClose: () => void;
-    onIngest: (selectedIds: string[], includeAttachments?: boolean) => void;
+    onIngest: (selectedIds: string[], includeAttachments?: boolean, selectedEmails?: GmailEmail[]) => void;
     isIngesting: boolean;
 }
 
@@ -907,7 +907,7 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
 
                         <div className="w-px h-8 bg-white/10 mx-2" />
                         <button 
-                            onClick={() => onIngest(selectedIds, includeAttachments)}
+                            onClick={() => onIngest(selectedIds, includeAttachments, emails.filter(e => selectedIds.includes(e.message_id)))}
                             disabled={isIngesting}
                             className="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-black px-8 py-2.5 rounded-xl text-xs uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] disabled:opacity-50 flex items-center gap-2"
                         >

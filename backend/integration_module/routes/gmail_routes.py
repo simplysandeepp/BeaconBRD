@@ -24,6 +24,7 @@ if NOISE_FILTER_PATH not in sys.path:
 
 from .. import gmail  # type: ignore
 from .. import pdf  # type: ignore
+from .. import ocr  # type: ignore
 from ..state import user_credentials  # type: ignore
 from brd_module.storage import store_chunks  # type: ignore
 from classifier import classify_chunks  # type: ignore
@@ -631,11 +632,17 @@ def gmail_ingest(body: GmailIngestRequest, request: Request):
             
             # Attachment chunks
             if body.include_attachments:
+                image_exts = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp"}
                 for att in email_data["attachments"]:
-                    if att["filename"].lower().endswith(".pdf"):
+                    filename = att["filename"].lower()
+                    if filename.endswith(".pdf") or any(filename.endswith(ext) for ext in image_exts):
                         try:
-                            pdf_data = gmail.download_attachment(service, msg_id, att["attachment_id"])
-                            extracted_text = pdf.extract_text_from_pdf_bytes(pdf_data)
+                            attachment_data = gmail.download_attachment(service, msg_id, att["attachment_id"])
+                            if filename.endswith(".pdf"):
+                                extracted_text = ocr.extract_text_from_pdf(attachment_data)
+                            else:
+                                extracted_text = ocr.extract_text_from_image(attachment_data)
+                            
                             if extracted_text and len(extracted_text) >= 15:
                                 chunk_dicts.append({
                                     "cleaned_text": extracted_text[:2000],
@@ -644,7 +651,7 @@ def gmail_ingest(body: GmailIngestRequest, request: Request):
                                     "source_type": "gmail",
                                 })
                         except Exception as e:
-                            print(f"Failed to process attachment {att['filename']}: {e}")
+                            print(f"Failed to process attachment {att['filename']} with OCR: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gmail extraction failed: {e}")
 
