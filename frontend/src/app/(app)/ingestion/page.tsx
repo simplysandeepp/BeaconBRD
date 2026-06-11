@@ -166,7 +166,7 @@ export default function IngestionPage() {
         ...(() => {
             const allFileNames = new Set([
                 ...uploadedFiles.map(f => f.name),
-                ...ingestedFiles
+                ...Array.from(ingestedFiles)
             ]);
             return Array.from(allFileNames).map((name): ActiveSource => {
                 const f = uploadedFiles.find(uf => uf.name === name);
@@ -185,7 +185,7 @@ export default function IngestionPage() {
         ...(() => {
             const allSlackChannelIds = new Set([
                 ...selectedSlackChannels,
-                ...ingestedSlackChannelIds
+                ...Array.from(ingestedSlackChannelIds)
             ]);
             return Array.from(allSlackChannelIds)
                 .map((chId): ActiveSource | null => {
@@ -206,7 +206,7 @@ export default function IngestionPage() {
         ...(() => {
             const allGmailMsgIds = new Set([
                 ...selectedGmailEmails,
-                ...ingestedGmailMsgIds
+                ...Array.from(ingestedGmailMsgIds)
             ]);
             return Array.from(allGmailMsgIds)
                 .map((emailId): ActiveSource | null => {
