@@ -41,3 +41,15 @@ def restore_chunk(session_id: str, chunk_id: str):
         return {"message": f"Chunk {chunk_id} restored to active signals."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/")
+def delete_session_source(session_id: str, source_ref_prefix: str):
+    """
+    Delete chunks matching the given source_ref_prefix for a session.
+    """
+    try:
+        from brd_module.storage import delete_chunks_by_source_ref_prefix
+        delete_chunks_by_source_ref_prefix(session_id, source_ref_prefix)
+        return {"message": f"Source {source_ref_prefix} deleted successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

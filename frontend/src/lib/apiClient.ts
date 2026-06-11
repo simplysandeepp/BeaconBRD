@@ -366,6 +366,13 @@ export async function restoreChunk(
     return apiFetch(`/sessions/${sessionId}/chunks/${chunkId}/restore`, { method: "POST" });
 }
 
+export async function deleteSource(
+    sessionId: string,
+    sourceRefPrefix: string
+): Promise<{ message: string }> {
+    return apiFetch(`/sessions/${sessionId}/chunks/?source_ref_prefix=${encodeURIComponent(sourceRefPrefix)}`, { method: "DELETE" });
+}
+
 export async function generateBRD(
     sessionId: string
 ): Promise<{ message: string; snapshot_id: string }> {

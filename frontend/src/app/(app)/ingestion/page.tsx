@@ -18,6 +18,7 @@ import {
     uploadFileForOcr,
     getChunks,
     restoreChunk,
+    deleteSource,
     createSession,
     getSlackStatus,
     getSlackOAuthUrl,
@@ -127,73 +128,147 @@ export default function IngestionPage() {
 
     const allChunks = [...activeSignals, ...suppressedSignals];
 
+    // Scan all database chunks for unique ingested sources
+    const ingestedSlackChannelIds = new Set<string>();
+    const ingestedGmailMsgIds = new Set<string>();
+    const ingestedAttachments = new Map<string, { filename: string, emailId: string }>(); // key -> { filename, emailId }
+    const ingestedFiles = new Set<string>(); // filename
+
+    allChunks.forEach(chunk => {
+        const ref = chunk.source_ref;
+        if (ref.startsWith("slack:")) {
+            const parts = ref.split(":");
+            if (parts.length >= 2) {
+                ingestedSlackChannelIds.add(parts[1]);
+            }
+        } else if (ref.startsWith("gmail:")) {
+            const parts = ref.split(":");
+            if (parts.length === 2) {
+                // gmail:msg_id
+                ingestedGmailMsgIds.add(parts[1]);
+            } else if (parts.length >= 4 && parts[2] === "att") {
+                // gmail:msg_id:att:filename
+                const emailId = parts[1];
+                const filename = parts.slice(3).join(":");
+                ingestedAttachments.set(`${emailId}-att-${filename}`, { filename, emailId });
+            }
+        } else if (ref.startsWith("file:")) {
+            const parts = ref.split(":");
+            if (parts.length >= 2) {
+                ingestedFiles.add(parts[1]);
+            }
+        }
+    });
+
     // Build unified active sources list
     const activeSources: ActiveSource[] = [
         // Files
-        ...uploadedFiles.map((f): ActiveSource => {
-            const fileChunks = allChunks.filter(c => c.source_ref.startsWith(`file:${f.name}`));
-            return {
-                id: f.name,
-                kind: 'file',
-                name: f.name,
-                ext: f.ext.toUpperCase(),
-                status: f.status === 'done' || fileChunks.length > 0 ? 'done' : f.status,
-                chunkCount: fileChunks.length > 0 ? fileChunks.length : f.chunkCount,
-            };
-        }),
+        ...(() => {
+            const allFileNames = new Set([
+                ...uploadedFiles.map(f => f.name),
+                ...ingestedFiles
+            ]);
+            return Array.from(allFileNames).map((name): ActiveSource => {
+                const f = uploadedFiles.find(uf => uf.name === name);
+                const fileChunks = allChunks.filter(c => c.source_ref.startsWith(`file:${name}`));
+                return {
+                    id: name,
+                    kind: 'file',
+                    name: name,
+                    ext: (name.split('.').pop() ?? '').toUpperCase(),
+                    status: (f?.status === 'done' || fileChunks.length > 0) ? 'done' : (f?.status ?? 'done'),
+                    chunkCount: fileChunks.length > 0 ? fileChunks.length : (f?.chunkCount),
+                };
+            });
+        })(),
         // Slack channels
-        ...selectedSlackChannels
-            .map((chId): ActiveSource | null => {
-                const ch = slackChannels.find((c) => c.id === chId);
-                if (!ch) return null;
-                const chChunks = allChunks.filter(c => c.source_ref.startsWith(`slack:${chId}:`));
-                return {
-                    id: chId,
-                    kind: 'slack',
-                    name: `#${ch.name}`,
-                    ext: 'SLACK',
-                    status: slackSyncedChannels.has(chId) || chChunks.length > 0 ? 'done' : 'queued',
-                    chunkCount: chChunks.length > 0 ? chChunks.length : undefined,
-                };
-            })
-            .filter((s): s is ActiveSource => s !== null),
-        // Gmail emails
-        ...selectedGmailEmails
-            .map((emailId): ActiveSource | null => {
-                const em = gmailEmails.find((e) => e.message_id === emailId);
-                if (!em) return null;
-                const msgChunks = allChunks.filter(c => c.source_ref === `gmail:${emailId}`);
-                return {
-                    id: emailId,
-                    kind: 'gmail',
-                    name: em.subject || '(No Subject)',
-                    ext: 'GMAIL',
-                    status: gmailSyncedEmails.has(emailId) || msgChunks.length > 0 ? 'done' : 'queued',
-                    chunkCount: msgChunks.length > 0 ? msgChunks.length : undefined,
-                };
-            })
-            .filter((s): s is ActiveSource => s !== null),
-        // Gmail email attachments
-        ...(gmailIncludeAttachments
-            ? selectedGmailEmails.flatMap((emailId): ActiveSource[] => {
-                const em = gmailEmails.find((e) => e.message_id === emailId);
-                if (!em || !em.attachments) return [];
-                return em.attachments.map((att): ActiveSource => {
-                    const ext = (att.filename.split('.').pop() ?? '').toUpperCase();
-                    const attId = att.id || att.attachment_id || att.filename;
-                    const attChunks = allChunks.filter(c => c.source_ref === `gmail:${emailId}:att:${att.filename}`);
+        ...(() => {
+            const allSlackChannelIds = new Set([
+                ...selectedSlackChannels,
+                ...ingestedSlackChannelIds
+            ]);
+            return Array.from(allSlackChannelIds)
+                .map((chId): ActiveSource | null => {
+                    const ch = slackChannels.find((c) => c.id === chId);
+                    const chChunks = allChunks.filter(c => c.source_ref.startsWith(`slack:${chId}:`));
                     return {
-                        id: `${emailId}-att-${attId}`,
-                        kind: 'file',
-                        name: att.filename,
-                        ext: ext || 'ATTACHMENT',
-                        status: gmailSyncedEmails.has(emailId) || attChunks.length > 0 ? 'done' : 'queued',
-                        chunkCount: attChunks.length > 0 ? attChunks.length : undefined,
-                        meta: { isAttachment: true, emailSubject: em.subject }
+                        id: chId,
+                        kind: 'slack',
+                        name: ch ? `#${ch.name}` : `Channel ${chId}`,
+                        ext: 'SLACK',
+                        status: slackSyncedChannels.has(chId) || chChunks.length > 0 ? 'done' : 'queued',
+                        chunkCount: chChunks.length > 0 ? chChunks.length : undefined,
                     };
+                })
+                .filter((s): s is ActiveSource => s !== null);
+        })(),
+        // Gmail emails
+        ...(() => {
+            const allGmailMsgIds = new Set([
+                ...selectedGmailEmails,
+                ...ingestedGmailMsgIds
+            ]);
+            return Array.from(allGmailMsgIds)
+                .map((emailId): ActiveSource | null => {
+                    const em = gmailEmails.find((e) => e.message_id === emailId);
+                    const msgChunks = allChunks.filter(c => c.source_ref === `gmail:${emailId}`);
+                    return {
+                        id: emailId,
+                        kind: 'gmail',
+                        name: em ? (em.subject || '(No Subject)') : `Email ${emailId}`,
+                        ext: 'GMAIL',
+                        status: gmailSyncedEmails.has(emailId) || msgChunks.length > 0 ? 'done' : 'queued',
+                        chunkCount: msgChunks.length > 0 ? msgChunks.length : undefined,
+                    };
+                })
+                .filter((s): s is ActiveSource => s !== null);
+        })(),
+        // Gmail email attachments
+        ...(() => {
+            const attachmentSources: ActiveSource[] = [];
+            if (gmailIncludeAttachments) {
+                // First add attachments from currently selected emails
+                selectedGmailEmails.forEach((emailId) => {
+                    const em = gmailEmails.find((e) => e.message_id === emailId);
+                    if (em && em.attachments) {
+                        em.attachments.forEach((att) => {
+                            const attId = att.id || att.attachment_id || att.filename;
+                            const uniqueKey = `${emailId}-att-${attId}`;
+                            const ext = (att.filename.split('.').pop() ?? '').toUpperCase();
+                            const attChunks = allChunks.filter(c => c.source_ref === `gmail:${emailId}:att:${att.filename}`);
+                            attachmentSources.push({
+                                id: uniqueKey,
+                                kind: 'file',
+                                name: att.filename,
+                                ext: ext || 'ATTACHMENT',
+                                status: gmailSyncedEmails.has(emailId) || attChunks.length > 0 ? 'done' : 'queued',
+                                chunkCount: attChunks.length > 0 ? attChunks.length : undefined,
+                                meta: { isAttachment: true, emailSubject: em.subject }
+                            });
+                        });
+                    }
                 });
-            })
-            : []),
+
+                // Then add any other attachments that are already in database
+                ingestedAttachments.forEach((value, key) => {
+                    if (!attachmentSources.some(s => s.id === key)) {
+                        const ext = (value.filename.split('.').pop() ?? '').toUpperCase();
+                        const attChunks = allChunks.filter(c => c.source_ref === `gmail:${value.emailId}:att:${value.filename}`);
+                        const em = gmailEmails.find((e) => e.message_id === value.emailId);
+                        attachmentSources.push({
+                            id: key,
+                            kind: 'file',
+                            name: value.filename,
+                            ext: ext || 'ATTACHMENT',
+                            status: 'done',
+                            chunkCount: attChunks.length > 0 ? attChunks.length : undefined,
+                            meta: { isAttachment: true, emailSubject: em?.subject || 'Ingested Email' }
+                        });
+                    }
+                });
+            }
+            return attachmentSources;
+        })(),
     ];
 
     const ensureSessionId = async (): Promise<string> => {
@@ -445,6 +520,52 @@ export default function IngestionPage() {
         }
         setUploading(false);
         await refreshReviewGate(sid);
+    };
+
+    const handleDeleteSource = async (src: ActiveSource) => {
+        if (!sessionId) return;
+        setReviewLoading(true);
+        try {
+            let prefix = "";
+            if (src.kind === 'file') {
+                if (src.meta?.isAttachment) {
+                    const match = src.id.match(/^(.+?)-att-(.+)$/);
+                    if (match) {
+                        const emailId = match[1];
+                        prefix = `gmail:${emailId}:att:${src.name}`;
+                    } else {
+                        prefix = `gmail::att:${src.name}`;
+                    }
+                } else {
+                    prefix = `file:${src.name}`;
+                }
+            } else if (src.kind === 'slack') {
+                prefix = `slack:${src.id}`;
+            } else if (src.kind === 'gmail') {
+                prefix = `gmail:${src.id}`;
+            }
+
+            if (prefix) {
+                await deleteSource(sessionId, prefix);
+            }
+
+            // Clean up frontend state selection
+            if (src.kind === 'file') {
+                if (!src.meta?.isAttachment) {
+                    removeFile(src.name);
+                }
+            } else if (src.kind === 'slack') {
+                setSelectedSlackChannels((prev) => prev.filter((id) => id !== src.id));
+            } else if (src.kind === 'gmail') {
+                setSelectedGmailEmails((prev) => prev.filter((id) => id !== src.id));
+            }
+
+            await refreshReviewGate();
+        } catch (e) {
+            setUploadError(e instanceof Error ? e.message : 'Failed to delete source chunks');
+        } finally {
+            setReviewLoading(false);
+        }
     };
 
     const refreshReviewGate = async (sidOverride?: string) => {
@@ -990,33 +1111,13 @@ export default function IngestionPage() {
                                                     <Eye size={13} />
                                                 </button>
                                             )}
-                                            {src.kind === 'file' && !src.meta?.isAttachment && (
-                                                <button
-                                                    onClick={() => removeFile(src.name)}
-                                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                                    title="Remove"
-                                                >
-                                                    <Trash2 size={13} />
-                                                </button>
-                                            )}
-                                            {src.kind === 'slack' && (
-                                                <button
-                                                    onClick={() => setSelectedSlackChannels((prev) => prev.filter((id) => id !== src.id))}
-                                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                                    title="Remove"
-                                                >
-                                                    <Trash2 size={13} />
-                                                </button>
-                                            )}
-                                            {src.kind === 'gmail' && (
-                                                <button
-                                                    onClick={() => setSelectedGmailEmails((prev) => prev.filter((id) => id !== src.id))}
-                                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                                    title="Remove"
-                                                >
-                                                    <Trash2 size={13} />
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => handleDeleteSource(src)}
+                                                className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                title="Delete Ingestion"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
                                         </div>
                                     </td>
                                 </motion.tr>

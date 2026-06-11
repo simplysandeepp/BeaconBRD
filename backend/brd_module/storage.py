@@ -389,3 +389,16 @@ def get_current_snapshot_id(session_id: str) -> str:
         return row[0] if row else "adhoc-snapshot"
     finally:
         conn.close()
+
+def delete_chunks_by_source_ref_prefix(session_id: str, prefix: str):
+    """Deletes chunks from classified_chunks for a session starting with a given source_ref prefix."""
+    conn, db_type = get_connection()
+    try:
+        cur = conn.cursor()
+        query = "DELETE FROM classified_chunks WHERE session_id = %s AND source_ref LIKE %s"
+        if db_type == "sqlite":
+            query = query.replace("%s", "?")
+        cur.execute(query, (session_id, f"{prefix}%"))
+        conn.commit()
+    finally:
+        conn.close()
