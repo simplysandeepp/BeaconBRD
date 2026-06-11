@@ -123,30 +123,37 @@ export default function IngestionPage() {
     const [gmailReplicaOpen, setGmailReplicaOpen] = useState(false);
     const [slackSyncedChannels, setSlackSyncedChannels] = useState<Set<string>>(new Set());
     const [gmailSyncedEmails, setGmailSyncedEmails] = useState<Set<string>>(new Set());
+    const [gmailIncludeAttachments, setGmailIncludeAttachments] = useState(true);
+
+    const allChunks = [...activeSignals, ...suppressedSignals];
 
     // Build unified active sources list
     const activeSources: ActiveSource[] = [
         // Files
-        ...uploadedFiles.map((f): ActiveSource => ({
-            id: f.name,
-            kind: 'file',
-            name: f.name,
-            ext: f.ext.toUpperCase(),
-            status: f.status,
-            chunkCount: f.chunkCount,
-        })),
+        ...uploadedFiles.map((f): ActiveSource => {
+            const fileChunks = allChunks.filter(c => c.source_ref.startsWith(`file:${f.name}`));
+            return {
+                id: f.name,
+                kind: 'file',
+                name: f.name,
+                ext: f.ext.toUpperCase(),
+                status: f.status === 'done' || fileChunks.length > 0 ? 'done' : f.status,
+                chunkCount: fileChunks.length > 0 ? fileChunks.length : f.chunkCount,
+            };
+        }),
         // Slack channels
         ...selectedSlackChannels
             .map((chId): ActiveSource | null => {
                 const ch = slackChannels.find((c) => c.id === chId);
                 if (!ch) return null;
+                const chChunks = allChunks.filter(c => c.source_ref.startsWith(`slack:${chId}:`));
                 return {
                     id: chId,
                     kind: 'slack',
                     name: `#${ch.name}`,
                     ext: 'SLACK',
-                    status: slackSyncedChannels.has(chId) ? 'done' : 'queued',
-                    chunkCount: slackSyncedChannels.has(chId) ? undefined : undefined,
+                    status: slackSyncedChannels.has(chId) || chChunks.length > 0 ? 'done' : 'queued',
+                    chunkCount: chChunks.length > 0 ? chChunks.length : undefined,
                 };
             })
             .filter((s): s is ActiveSource => s !== null),
@@ -155,35 +162,38 @@ export default function IngestionPage() {
             .map((emailId): ActiveSource | null => {
                 const em = gmailEmails.find((e) => e.message_id === emailId);
                 if (!em) return null;
+                const msgChunks = allChunks.filter(c => c.source_ref === `gmail:${emailId}`);
                 return {
                     id: emailId,
                     kind: 'gmail',
                     name: em.subject || '(No Subject)',
                     ext: 'GMAIL',
-                    status: gmailSyncedEmails.has(emailId) ? 'done' : 'queued',
-                    chunkCount: undefined,
+                    status: gmailSyncedEmails.has(emailId) || msgChunks.length > 0 ? 'done' : 'queued',
+                    chunkCount: msgChunks.length > 0 ? msgChunks.length : undefined,
                 };
             })
             .filter((s): s is ActiveSource => s !== null),
         // Gmail email attachments
-        ...selectedGmailEmails
-            .flatMap((emailId): ActiveSource[] => {
+        ...(gmailIncludeAttachments
+            ? selectedGmailEmails.flatMap((emailId): ActiveSource[] => {
                 const em = gmailEmails.find((e) => e.message_id === emailId);
                 if (!em || !em.attachments) return [];
                 return em.attachments.map((att): ActiveSource => {
                     const ext = (att.filename.split('.').pop() ?? '').toUpperCase();
                     const attId = att.id || att.attachment_id || att.filename;
+                    const attChunks = allChunks.filter(c => c.source_ref === `gmail:${emailId}:att:${att.filename}`);
                     return {
                         id: `${emailId}-att-${attId}`,
                         kind: 'file',
                         name: att.filename,
                         ext: ext || 'ATTACHMENT',
-                        status: gmailSyncedEmails.has(emailId) ? 'done' : 'queued',
-                        chunkCount: undefined,
+                        status: gmailSyncedEmails.has(emailId) || attChunks.length > 0 ? 'done' : 'queued',
+                        chunkCount: attChunks.length > 0 ? attChunks.length : undefined,
                         meta: { isAttachment: true, emailSubject: em.subject }
                     };
                 });
-            }),
+            })
+            : []),
     ];
 
     const ensureSessionId = async (): Promise<string> => {
@@ -798,6 +808,15 @@ export default function IngestionPage() {
                         </button>
                     ) : (
                         <div className="space-y-2">
+                            <label className="flex items-center gap-2 px-1 py-0.5 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={gmailIncludeAttachments}
+                                    onChange={(e) => setGmailIncludeAttachments(e.target.checked)}
+                                    className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer rounded border-zinc-700 bg-zinc-900"
+                                />
+                                <span className="text-xs text-zinc-400">Include Attachments</span>
+                            </label>
                             <button
                                 onClick={() => setGmailReplicaOpen(true)}
                                 className="btn-primary w-full text-sm flex items-center justify-center gap-2"
@@ -806,7 +825,7 @@ export default function IngestionPage() {
                                 Open Gmail
                             </button>
                             <button
-                                onClick={() => syncSelectedGmailEmails()}
+                                onClick={() => syncSelectedGmailEmails(undefined, gmailIncludeAttachments)}
                                 disabled={gmailSyncing || selectedGmailEmails.length === 0}
                                 className="btn-secondary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50"
                             >
@@ -1169,6 +1188,9 @@ export default function IngestionPage() {
                                 });
                                 return merged;
                             });
+                        }
+                        if (includeAtts !== undefined) {
+                            setGmailIncludeAttachments(includeAtts);
                         }
                         syncSelectedGmailEmails(ids, includeAtts);
                         setGmailReplicaOpen(false);
