@@ -263,7 +263,7 @@ def run_parallel_heuristics(chunks: list[dict]) -> tuple[dict[int, dict], list[t
 # Phase 2 — Batch LLM classification
 # ---------------------------------------------------------------------------
 
-MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
+MODEL_NAME = os.environ.get("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 MAX_RETRIES = 5
 BATCH_SIZE = 10
 MAX_CONCURRENT_BATCHES = 2
@@ -458,7 +458,7 @@ def classify_chunks(chunks: list[dict], api_key: str, log_fn=None) -> list[Class
 
     fast_path_count = len(fast_results)
     llm_count = len(llm_pending)
-    print(f"  → Heuristic/domain gate: {fast_path_count} chunks  |  LLM queue: {llm_count} chunks")
+    print(f"  -> Heuristic/domain gate: {fast_path_count} chunks  |  LLM queue: {llm_count} chunks")
 
     # ── Phase 2: batch LLM calls ─────────────────────────────────────────────
     llm_results: dict[int, dict] = {}
