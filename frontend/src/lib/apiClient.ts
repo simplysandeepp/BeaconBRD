@@ -686,3 +686,44 @@ export function openGmailAuthPopup(authUrl: string): Promise<{ status: string; r
         }, 1000);
     });
 }
+
+export function openSlackAuthPopup(authUrl: string): Promise<{ status: string; reason: string | null }> {
+    return new Promise((resolve, reject) => {
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+
+        const topWindow = window.top ?? window;
+        const popup = topWindow.open(
+            authUrl,
+            "Slack OAuth",
+            `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`
+        );
+
+        if (!popup) {
+            reject(new Error("Popup blocked by browser. Please enable popups for this site."));
+            return;
+        }
+
+        const channel = new BroadcastChannel("slack_oauth");
+        channel.onmessage = (event: MessageEvent) => {
+            if (event.data?.type === "SLACK_AUTH_COMPLETE") {
+                channel.close();
+                clearInterval(timer);
+                resolve({
+                    status: event.data.status,
+                    reason: event.data.reason || null,
+                });
+            }
+        };
+
+        const timer = setInterval(() => {
+            if (popup.closed) {
+                clearInterval(timer);
+                channel.close();
+                resolve({ status: "closed", reason: "Popup closed by user" });
+            }
+        }, 1000);
+    });
+}

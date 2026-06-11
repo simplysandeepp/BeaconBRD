@@ -40,6 +40,7 @@ import {
     listGmailEmails,
     ingestGmailEmails,
     openGmailAuthPopup,
+    openSlackAuthPopup,
     type SlackChannel,
     type SlackStatus,
     type GmailEmail,
@@ -85,6 +86,20 @@ export default function ProfilePage() {
                 type: "GMAIL_AUTH_COMPLETE",
                 status: gmailParam,
                 reason: gmailReason,
+            });
+            channel.close();
+            window.close();
+        }
+
+        const slackParam = searchParams.get("slack");
+        const slackReason = searchParams.get("reason");
+
+        if (slackParam) {
+            const channel = new BroadcastChannel("slack_oauth");
+            channel.postMessage({
+                type: "SLACK_AUTH_COMPLETE",
+                status: slackParam,
+                reason: slackReason,
             });
             channel.close();
             window.close();
@@ -269,14 +284,17 @@ export default function ProfilePage() {
 
     const connectSlack = async () => {
         setSlackError(null);
+        setSlackMessage(null);
         try {
             const authUrl = await getSlackOAuthUrl();
-            // Use window.top to escape any iframe context (e.g. Framer landing page iframe)
-            // so that Slack's OAuth page is not blocked by X-Frame-Options: sameorigin
-            if (window.top) {
-                window.top.location.href = authUrl;
+            const result = await openSlackAuthPopup(authUrl);
+            if (result.status === "connected") {
+                setSlackMessage("Slack workspace connected successfully.");
+                await syncSlackStatus();
+            } else if (result.status === "error") {
+                setSlackError(result.reason || "Slack OAuth failed. Please try again.");
             } else {
-                window.location.href = authUrl;
+                await syncSlackStatus();
             }
         } catch (e) {
             setSlackError(e instanceof Error ? e.message : "Failed to start Slack OAuth");

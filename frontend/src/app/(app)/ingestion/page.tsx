@@ -30,6 +30,7 @@ import {
     listGmailEmails,
     ingestGmailEmails,
     openGmailAuthPopup,
+    openSlackAuthPopup,
     type Chunk,
     type GmailStatus,
     type GmailEmail,
@@ -210,14 +211,18 @@ export default function IngestionPage() {
     };
 
     const startSlackConnect = async () => {
+        setUploadError(null);
+        setSlackMessage(null);
         try {
             const authUrl = await getSlackOAuthUrl();
-            // Use window.top to escape any iframe context (e.g. Framer landing page iframe)
-            // so that Slack's OAuth page is not blocked by X-Frame-Options: sameorigin
-            if (window.top) {
-                window.top.location.href = authUrl;
+            const result = await openSlackAuthPopup(authUrl);
+            if (result.status === "connected") {
+                setSlackMessage("Slack workspace connected.");
+                await syncSlackData(true);
+            } else if (result.status === "error") {
+                setUploadError(result.reason || "Slack OAuth failed. Please try again.");
             } else {
-                window.location.href = authUrl;
+                await syncSlackData(true);
             }
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to start Slack OAuth');
@@ -463,22 +468,32 @@ export default function IngestionPage() {
     }, []);
 
     useEffect(() => {
+        if (typeof window === 'undefined') return;
+
         const slackParam = searchParams.get('slack');
         const slackReason = searchParams.get('reason');
-        if (slackParam === 'connected') {
-            setSlackMessage('Slack workspace connected.');
-            syncSlackData(true);
-        } else if (slackParam === 'error') {
-            setUploadError(slackReason ? `Slack OAuth failed: ${slackReason}` : 'Slack OAuth failed. Please try again.');
+        if (slackParam) {
+            const channel = new BroadcastChannel('slack_oauth');
+            channel.postMessage({
+                type: 'SLACK_AUTH_COMPLETE',
+                status: slackParam,
+                reason: slackReason,
+            });
+            channel.close();
+            window.close();
         }
 
         const gmailParam = searchParams.get('gmail');
         const gmailReason = searchParams.get('reason');
-        if (gmailParam === 'connected') {
-            setGmailMessage('Gmail connected.');
-            syncGmailData(true);
-        } else if (gmailParam === 'error') {
-            setUploadError(gmailReason ? `Gmail OAuth failed: ${gmailReason}` : 'Gmail OAuth failed. Please try again.');
+        if (gmailParam) {
+            const channel = new BroadcastChannel('gmail_oauth');
+            channel.postMessage({
+                type: 'GMAIL_AUTH_COMPLETE',
+                status: gmailParam,
+                reason: gmailReason,
+            });
+            channel.close();
+            window.close();
         }
     }, [searchParams]);
 
