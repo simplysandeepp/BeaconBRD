@@ -17,10 +17,10 @@ const config: Config = {
     			overlay:   '#0d0e14',
 
     			// ── Accents (landing page brand) ──
-    			primary:   '#8aa5ff',
+    			primary:   '#ffffff',
     			accent:    '#2934ff',
     			cta:       '#854dff',
-    			glow:      '#a3b9ff',
+    			glow:      '#ffffff',
 
     			// ── Semantic (data / badges only) ──
     			success:   '#34d399',
@@ -31,8 +31,8 @@ const config: Config = {
     			// ── Glass tokens ──
     			'glass':                'rgba(18, 20, 38, 0.92)',
     			'glass-hover':          'rgba(22, 23, 38, 0.96)',
-    			'glass-border':         'rgba(138, 165, 255, 0.09)',
-    			'glass-border-strong':  'rgba(138, 165, 255, 0.18)',
+    			'glass-border':         'rgba(255, 255, 255, 0.09)',
+    			'glass-border-strong':  'rgba(255, 255, 255, 0.18)',
 
     			// ── Keep HSL-based shadcn-ish tokens so dark: classes still work ──
     			background: 'hsl(var(--background))',
@@ -96,7 +96,7 @@ const config: Config = {
     		boxShadow: {
     			glass: '0 8px 40px rgba(0,0,0,0.60)',
     			'glass-lg': '0 24px 80px rgba(0,0,0,0.75)',
-    			'glow-blue': '0 0 24px rgba(138, 165, 255, 0.25)',
+    			'glow-blue': '0 0 24px rgba(255, 255, 255, 0.25)',
     			'glow-electric': '0 0 24px rgba(41, 52, 255, 0.30)',
     			'glow-purple': '0 0 24px rgba(133, 77, 255, 0.25)',
     			'glow-green': '0 0 20px rgba(52, 211, 153, 0.18)',
@@ -109,9 +109,9 @@ const config: Config = {
     			'slide-in-right': 'slide-in-right 0.3s cubic-bezier(0.16,1,0.3,1) forwards'
     		},
     		backgroundImage: {
-    			'brand-gradient': 'linear-gradient(135deg, #8aa5ff, #2934ff, #854dff)',
+    			'brand-gradient': 'linear-gradient(135deg, #ffffff, #2934ff, #854dff)',
     			'blue-gradient': 'linear-gradient(135deg, #031457, #2934ff)',
-    			'glass-gradient': 'linear-gradient(135deg, rgba(138,165,255,0.06) 0%, rgba(138,165,255,0.02) 100%)',
+    			'glass-gradient': 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
     		}
     	}
     },
