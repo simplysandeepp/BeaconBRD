@@ -660,7 +660,7 @@ export default function BRDPage() {
                                         <div className="space-y-2">
                                             {version.chunks.map((chunk) => (
                                                 <div key={chunk.chunk_id} className="p-2.5 rounded-lg bg-white/2 border border-white/5 space-y-1.5 bg-white/3">
-                                                    <p className="text-xs text-zinc-300 italic leading-relaxed">"{chunk.cleaned_text || chunk.raw_text}"</p>
+                                                    <p className="text-xs text-zinc-300 italic leading-relaxed">"{chunk.cleaned_text}"</p>
                                                     <div className="flex items-center gap-2 flex-wrap text-[10px]">
                                                         <SourceTypeBadge sourceType={chunk.source_type} />
                                                         <SignalLabelBadge label={chunk.signal_label ?? chunk.label} />
