@@ -345,6 +345,77 @@ def edit_brd_section(session_id: str, section_name: str, body: EditSectionReques
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/sections/{section_name}/history")
+def get_brd_section_history(session_id: str, section_name: str):
+    """
+    Retrieve all historical versions of a specific section in a session,
+    including the source chunks used for each version.
+    """
+    conn, db_type = get_connection()
+    versions = []
+    try:
+        cur = conn.cursor()
+        if db_type == "postgres":
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Query all versions
+        query = """
+            SELECT snapshot_id, version_number, content, human_edited, generated_at, source_chunk_ids
+            FROM brd_sections
+            WHERE session_id = %s AND section_name = %s
+            ORDER BY version_number DESC
+        """
+        if db_type == "sqlite":
+            query = query.replace("%s", "?")
+            
+        cur.execute(query, (session_id, section_name))
+        rows = cur.fetchall()
+        
+        # For each row, collect details
+        for r in rows:
+            version_number = r['version_number'] if db_type == "postgres" else r[1]
+            snapshot_id = r['snapshot_id'] if db_type == "postgres" else r[0]
+            content = r['content'] if db_type == "postgres" else r[2]
+            human_edited = bool(r['human_edited'] if db_type == "postgres" else r[3])
+            generated_at = str(r['generated_at']) if (r['generated_at'] if db_type == "postgres" else r[4]) is not None else None
+            source_ids_raw = r['source_chunk_ids'] if db_type == "postgres" else r[5]
+            
+            try:
+                source_chunk_ids = json.loads(source_ids_raw) if isinstance(source_ids_raw, str) else (source_ids_raw or [])
+            except Exception:
+                source_chunk_ids = []
+                
+            # Fetch details for source_chunk_ids
+            chunks_list = []
+            if source_chunk_ids:
+                placeholders = ",".join(["?" if db_type == "sqlite" else "%s"] * len(source_chunk_ids))
+                chunk_query = f"SELECT data FROM classified_chunks WHERE chunk_id IN ({placeholders})"
+                cur.execute(chunk_query, tuple(source_chunk_ids))
+                chunk_rows = cur.fetchall()
+                for cr in chunk_rows:
+                    data = cr['data'] if db_type == "postgres" else cr[0]
+                    if isinstance(data, str):
+                        data = json.loads(data)
+                    chunks_list.append(data)
+            
+            versions.append({
+                "version_number": version_number,
+                "snapshot_id": snapshot_id,
+                "content": content,
+                "human_edited": human_edited,
+                "generated_at": generated_at,
+                "source_chunk_ids": source_chunk_ids,
+                "chunks": chunks_list
+            })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+        
+    return {"history": versions}
+
+
 @router.get("/export")
 def export_brd_document(session_id: str, format: str = "markdown"):
     """

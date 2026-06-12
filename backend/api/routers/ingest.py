@@ -312,7 +312,7 @@ async def upload_file_ocr(
                 detail=f"OCR failed to extract usable text from '{filename}'."
             )
 
-        chunk_dicts = _chunk_text(text, filename, ext)
+        chunk_dicts = _chunk_text(text, filename, "file")
         if not chunk_dicts:
             raise HTTPException(status_code=400, detail="No classifiable chunks produced after OCR.")
 

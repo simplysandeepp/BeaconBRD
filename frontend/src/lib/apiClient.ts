@@ -453,6 +453,24 @@ export async function editBRDSection(
     });
 }
 
+export interface SectionHistoryVersion {
+    version_number: number;
+    snapshot_id: string | null;
+    content: string;
+    human_edited: boolean;
+    generated_at: string | null;
+    source_chunk_ids: string[];
+    chunks: Chunk[];
+}
+
+export async function getBRDSectionHistory(
+    sessionId: string,
+    sectionName: string
+): Promise<{ history: SectionHistoryVersion[] }> {
+    return apiFetch<{ history: SectionHistoryVersion[] }>(`/sessions/${sessionId}/brd/sections/${sectionName}/history`);
+}
+
+
 export async function getSlackOAuthUrl(): Promise<string> {
     const data = await apiFetch<{ auth_url: string }>("/integrations/slack/auth/start");
     return data.auth_url;

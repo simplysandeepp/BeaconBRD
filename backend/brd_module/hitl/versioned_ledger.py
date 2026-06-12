@@ -17,7 +17,8 @@ def create_new_version(
     section_name: str,
     content: str,
     origin: str,
-    snapshot_id: Optional[str] = None
+    snapshot_id: Optional[str] = None,
+    source_chunk_ids: Optional[List[str]] = None
 ) -> str:
     """Stores a new version of a BRD section, bridging the gap between old and new state."""
     conn, db_type = get_connection()
@@ -51,7 +52,7 @@ def create_new_version(
         
         cur.execute(query, (
             version_id, session_id, snapshot_id, section_name, 
-            version_number, content, json.dumps([]), (origin == "human"), 
+            version_number, content, json.dumps(source_chunk_ids or []), (origin == "human"), 
             datetime.now(timezone.utc)
         ))
         conn.commit()

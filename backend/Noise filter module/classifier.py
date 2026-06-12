@@ -484,6 +484,7 @@ def classify_chunks(chunks: list[dict], api_key: str, log_fn=None) -> list[Class
     for i, chunk in enumerate(chunks):
         result = all_results[i]
         classified.append(ClassifiedChunk(
+            source_type=chunk.get("source_type", "file"),
             source_ref=chunk.get("source_ref", ""),
             speaker=chunk.get("speaker"),
             raw_text=chunk.get("raw_text", ""),

@@ -101,7 +101,7 @@ def functional_requirements_agent(session_id: str, snapshot_id: str, client: Gro
     if not reqs and not additional_context:
         # Explicit missing data handling
         placeholder = "Insufficient data to generate this section. No requirement signals were found in the provided sources."
-        create_new_version(session_id, None, 'functional_requirements', placeholder, 'system', snapshot_id=snapshot_id)
+        create_new_version(session_id, None, 'functional_requirements', placeholder, 'system', snapshot_id=snapshot_id, source_chunk_ids=[])
         return placeholder
         
     source_ids = [c.chunk_id for c in reqs]
@@ -140,7 +140,7 @@ Output ONLY the final markdown content for this section. Do not wrap in markdown
     except Exception as e:
         content = f"Error generating functional requirements: {e}"
         
-    create_new_version(session_id, None, 'functional_requirements', content, 'system', snapshot_id=snapshot_id)
+    create_new_version(session_id, None, 'functional_requirements', content, 'system', snapshot_id=snapshot_id, source_chunk_ids=source_ids)
     return content
 
 def stakeholder_analysis_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
@@ -167,7 +167,7 @@ def stakeholder_analysis_agent(session_id: str, snapshot_id: str, client: Groq =
     
     if len(unique_speakers) < 2 and not additional_context:
         placeholder = "Insufficient data to generate this section. Fewer than 2 unique stakeholders were identified in the source communications."
-        create_new_version(session_id, None, 'stakeholder_analysis', placeholder, 'system', snapshot_id=snapshot_id)
+        create_new_version(session_id, None, 'stakeholder_analysis', placeholder, 'system', snapshot_id=snapshot_id, source_chunk_ids=[])
         return placeholder
         
     source_ids = [c.chunk_id for c in feedback_chunks]
@@ -212,10 +212,12 @@ Output ONLY the final markdown content for this section. Do not wrap in markdown
     except Exception as e:
         content = f"Error generating stakeholder analysis: {e}"
         
-    create_new_version(session_id, None, 'stakeholder_analysis', content, 'system', snapshot_id=snapshot_id)
+    create_new_version(session_id, None, 'stakeholder_analysis', content, 'system', snapshot_id=snapshot_id, source_chunk_ids=source_ids)
     return content
 
-def timeline_agent(session_id: str, snapshot_id: str, client: Groq = None) -> str:
+def timeline_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+    if is_section_locked(session_id, 'timeline') and not additional_context:
+        return get_section_content(session_id, 'timeline')
     if client is None:
         client = Groq(api_key=os.environ.get("GROQ_CLOUD_API", ""))
         
@@ -223,9 +225,9 @@ def timeline_agent(session_id: str, snapshot_id: str, client: Groq = None) -> st
     # Cap to 15 most relevant signals
     timeline_refs = timeline_refs[:15]
     
-    if not timeline_refs:
+    if not timeline_refs and not additional_context:
         placeholder = "No project timeline information was found in the provided sources. Timeline must be established through stakeholder clarification."
-        create_new_version(session_id, None, 'timeline', placeholder, 'system', snapshot_id=snapshot_id)
+        create_new_version(session_id, None, 'timeline', placeholder, 'system', snapshot_id=snapshot_id, source_chunk_ids=[])
         return placeholder
         
     source_ids = [c.chunk_id for c in timeline_refs]
@@ -248,6 +250,12 @@ Instructions:
 Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
 """
 
+    if additional_context:
+        prompt_text += f"\nADDITIONAL USER INSTRUCTION: {additional_context}\n"
+        current_content = get_section_content(session_id, 'timeline')
+        if current_content:
+            prompt_text += f"\nCURRENT SECTION CONTENT:\n{current_content}\n"
+
     messages = [
         {"role": "system", "content": "You are a senior business analyst. You output ONLY valid Markdown. You NEVER use HTML tags. Use Markdown headers and lists strictly."},
         {"role": "user", "content": prompt_text}
@@ -258,7 +266,7 @@ Output ONLY the final markdown content for this section. Do not wrap in markdown
     except Exception as e:
         content = f"Error generating timeline: {e}"
         
-    create_new_version(session_id, None, 'timeline', content, 'system', snapshot_id=snapshot_id)
+    create_new_version(session_id, None, 'timeline', content, 'system', snapshot_id=snapshot_id, source_chunk_ids=source_ids)
     return content
 
 def decisions_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
@@ -273,7 +281,7 @@ def decisions_agent(session_id: str, snapshot_id: str, client: Groq = None, addi
     
     if not decision_refs and not additional_context:
         placeholder = "Insufficient data to generate this section. No confirmed decisions were found in the provided sources."
-        create_new_version(session_id, None, 'decisions', placeholder, 'system', snapshot_id=snapshot_id)
+        create_new_version(session_id, None, 'decisions', placeholder, 'system', snapshot_id=snapshot_id, source_chunk_ids=[])
         return placeholder
         
     source_ids = [c.chunk_id for c in decision_refs]
@@ -300,7 +308,7 @@ Output ONLY the final markdown content for this section.
     except Exception as e:
         content = f"Error generating decisions: {e}"
         
-    create_new_version(session_id, None, 'decisions', content, 'system', snapshot_id=snapshot_id)
+    create_new_version(session_id, None, 'decisions', content, 'system', snapshot_id=snapshot_id, source_chunk_ids=source_ids)
     return content
 
 def assumptions_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
@@ -312,7 +320,7 @@ def assumptions_agent(session_id: str, snapshot_id: str, client: Groq = None, ad
     all_refs = get_signals_for_snapshot(snapshot_id)
     if not all_refs and not additional_context:
         placeholder = "Insufficient data to generate this section. No signals were found to infer assumptions from."
-        create_new_version(session_id, None, 'assumptions', placeholder, 'system', snapshot_id=snapshot_id)
+        create_new_version(session_id, None, 'assumptions', placeholder, 'system', snapshot_id=snapshot_id, source_chunk_ids=[])
         return placeholder
         
     source_ids = [c.chunk_id for c in all_refs]
@@ -345,7 +353,7 @@ Output ONLY the final markdown content for this section.
     except Exception as e:
         content = f"Error generating assumptions: {e}"
         
-    create_new_version(session_id, None, 'assumptions', content, 'system', snapshot_id=snapshot_id)
+    create_new_version(session_id, None, 'assumptions', content, 'system', snapshot_id=snapshot_id, source_chunk_ids=source_ids)
     return content
 
 def success_metrics_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
@@ -363,7 +371,7 @@ def success_metrics_agent(session_id: str, snapshot_id: str, client: Groq = None
     
     if not signals and not additional_context:
         placeholder = "Insufficient data to generate this section. No requirements or decisions were found to derive metrics from."
-        create_new_version(session_id, None, 'success_metrics', placeholder, 'system', snapshot_id=snapshot_id)
+        create_new_version(session_id, None, 'success_metrics', placeholder, 'system', snapshot_id=snapshot_id, source_chunk_ids=[])
         return placeholder
         
     source_ids = [c.chunk_id for c in signals]
@@ -395,7 +403,7 @@ Output ONLY the final markdown content for this section.
     except Exception as e:
         content = f"Error generating success metrics: {e}"
         
-    create_new_version(session_id, None, 'success_metrics', content, 'system', snapshot_id=snapshot_id)
+    create_new_version(session_id, None, 'success_metrics', content, 'system', snapshot_id=snapshot_id, source_chunk_ids=source_ids)
     return content
 
 def executive_summary_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
@@ -456,7 +464,8 @@ Output ONLY the final markdown content for this section.
         content = f"Error generating executive summary: {e}"
         
     # Executive summary doesn't directly map to standard source IDs from AKS, it synthesizes.
-    create_new_version(session_id, None, 'executive_summary', content, 'system', snapshot_id=snapshot_id)
+    source_ids = [c.chunk_id for c in all_signals]
+    create_new_version(session_id, None, 'executive_summary', content, 'system', snapshot_id=snapshot_id, source_chunk_ids=source_ids)
     return content
 
 def run_brd_generation(

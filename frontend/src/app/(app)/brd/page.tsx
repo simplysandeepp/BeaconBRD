@@ -15,6 +15,8 @@ import {
     Share2,
     Unlock,
     Zap,
+    Mail,
+    MessageSquare,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -23,7 +25,7 @@ import { ShareBoardModal } from "@/components/ShareBoardModal";
 import { useBRDStore } from "@/store/useBRDStore";
 import { useSessionStore } from "@/store/useSessionStore";
 import { useAuth } from "@/contexts/AuthContext";
-import { getChunks, type Chunk } from "@/lib/apiClient";
+import { getChunks, getBRDSectionHistory, type Chunk, type SectionHistoryVersion } from "@/lib/apiClient";
 import type { Board } from "@/lib/firestore/boards";
 
 type SectionStatus = "generated" | "insufficient" | "human_edited" | "flagged";
@@ -226,6 +228,53 @@ function SectionCard({
     );
 }
 
+function SourceTypeBadge({ sourceType }: { sourceType?: string }) {
+    const type = (sourceType || "").toLowerCase();
+    let label = "User Doc";
+    let bgClass = "bg-cyan-500/10 border-cyan-500/20 text-cyan-300";
+    let Icon = FileText;
+
+    if (type === "gmail" || type === "email") {
+        label = "Gmail";
+        bgClass = "bg-red-500/10 border border-red-500/20 text-red-300";
+        Icon = Mail;
+    } else if (type === "slack") {
+        label = "Slack";
+        bgClass = "bg-indigo-500/10 border border-indigo-500/20 text-indigo-300";
+        Icon = MessageSquare;
+    } else if (type === "file" || type === "doc" || type === "user_upload") {
+        label = "User Doc";
+        bgClass = "bg-blue-500/10 border border-blue-500/20 text-blue-300";
+        Icon = FileText;
+    }
+
+    return (
+        <span className={cn("glass-badge text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded flex items-center gap-1.5 border", bgClass)}>
+            <Icon size={10} className="flex-shrink-0" />
+            {label}
+        </span>
+    );
+}
+
+function SignalLabelBadge({ label }: { label?: string }) {
+    const l = (label || "unknown").toLowerCase();
+    let bgClass = "bg-zinc-500/10 border border-zinc-500/20 text-zinc-400";
+    if (l === "requirement") {
+        bgClass = "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300";
+    } else if (l === "decision") {
+        bgClass = "bg-purple-500/10 border border-purple-500/20 text-purple-300";
+    } else if (l === "stakeholder_feedback" || l === "feedback") {
+        bgClass = "bg-amber-500/10 border border-amber-500/20 text-amber-300";
+    } else if (l === "timeline_reference" || l === "timeline") {
+        bgClass = "bg-blue-500/10 border border-blue-500/20 text-blue-300";
+    }
+    return (
+        <span className={cn("glass-badge text-[10px] font-medium px-2 py-0.5 rounded border capitalize", bgClass)}>
+            {l.replace("_", " ")}
+        </span>
+    );
+}
+
 export default function BRDPage() {
     const { activeSessionId, sessions } = useSessionStore();
     const { user } = useAuth();
@@ -236,9 +285,30 @@ export default function BRDPage() {
     const [flags, setFlags] = useState<ValidationFlagView[]>([]);
     const [attrDrawer, setAttrDrawer] = useState<BRDSectionView | null>(null);
     const [histDrawer, setHistDrawer] = useState<BRDSectionView | null>(null);
+    const [historyList, setHistoryList] = useState<SectionHistoryVersion[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const [allChunks, setAllChunks] = useState<Chunk[]>([]);
     const [chunkLoading, setChunkLoading] = useState(false);
     const [shareOpen, setShareOpen] = useState(false);
+
+    useEffect(() => {
+        if (!histDrawer || !sessionId) {
+            setHistoryList([]);
+            return;
+        }
+        const fetchHistory = async () => {
+            setHistoryLoading(true);
+            try {
+                const res = await getBRDSectionHistory(sessionId, histDrawer.id);
+                setHistoryList(res.history);
+            } catch {
+                setHistoryList([]);
+            } finally {
+                setHistoryLoading(false);
+            }
+        };
+        fetchHistory();
+    }, [histDrawer, sessionId]);
 
     const activeSession = sessions.find((s) => s.id === sessionId);
     const boardForShare: Board | null =
@@ -517,13 +587,20 @@ export default function BRDPage() {
                 ) : (
                     <div className="space-y-3">
                         {attributionChunks.map((chunk) => (
-                            <div key={chunk.chunk_id} className="glass-card p-3.5 rounded-xl">
-                                <p className="text-xs text-zinc-200 leading-relaxed mb-2 italic">"{chunk.cleaned_text}"</p>
+                            <div key={chunk.chunk_id} className="glass-card p-3.5 rounded-xl border border-white/5 bg-white/3">
+                                <p className="text-xs text-zinc-200 leading-relaxed mb-3 italic">"{chunk.cleaned_text}"</p>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="glass-badge text-[9px]">{chunk.signal_label ?? chunk.label ?? "unknown"}</span>
-                                    <span className="text-[10px] text-zinc-500">{chunk.speaker || "Unknown"}</span>
-                                    <span className="font-mono text-[10px] text-zinc-600">{chunk.source_ref}</span>
-                                    <span className="ml-auto text-[10px] font-mono text-emerald-400">{Math.round((chunk.confidence ?? 0) * 100)}%</span>
+                                    <SourceTypeBadge sourceType={chunk.source_type} />
+                                    <SignalLabelBadge label={chunk.signal_label ?? chunk.label} />
+                                    {chunk.speaker && (
+                                        <span className="text-[10px] text-zinc-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                                            {chunk.speaker}
+                                        </span>
+                                    )}
+                                    <span className="font-mono text-[10px] text-zinc-500 max-w-[200px] truncate" title={chunk.source_ref}>
+                                        {chunk.source_ref}
+                                    </span>
+                                    <span className="ml-auto text-[10px] font-mono text-emerald-400">{Math.round((chunk.confidence ?? 0) * 100)}% Match</span>
                                 </div>
                             </div>
                         ))}
@@ -532,24 +609,75 @@ export default function BRDPage() {
             </Drawer>
 
             <Drawer open={Boolean(histDrawer)} onClose={() => setHistDrawer(null)} title={histDrawer?.title ?? ""} subtitle="Version history">
-                {!histDrawer ? null : (
-                    <div className="space-y-3">
-                        <div className="glass-card p-4 rounded-xl">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="font-mono text-xs text-zinc-300 font-semibold">{histDrawer.version}</span>
-                                <span className="glass-badge badge-timeline text-[9px]">Current</span>
-                                {histDrawer.timestamp && (
-                                    <span className="text-[10px] text-zinc-600 ml-auto flex items-center gap-1">
-                                        <Clock size={9} />
-                                        {histDrawer.timestamp}
+                {historyLoading ? (
+                    <div className="text-xs text-zinc-500 flex items-center gap-2">
+                        <Loader2 size={12} className="animate-spin" /> Loading version history...
+                    </div>
+                ) : historyList.length === 0 ? (
+                    <div className="text-xs text-zinc-500">No historical versions were found for this section.</div>
+                ) : (
+                    <div className="space-y-4">
+                        {historyList.map((version, idx) => (
+                            <div key={version.version_number} className="glass-card p-4 rounded-xl border border-white/5 bg-white/3 space-y-3">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-xs text-zinc-200 font-bold bg-white/5 px-2 py-0.5 rounded">
+                                        v{version.version_number}
                                     </span>
-                                )}
+                                    {idx === 0 && (
+                                        <span className="glass-badge bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[9px] font-semibold px-2 py-0.5 rounded">
+                                            Current Version
+                                        </span>
+                                    )}
+                                    {version.human_edited ? (
+                                        <span className="glass-badge bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-[9px] font-semibold px-2 py-0.5 rounded flex items-center gap-1">
+                                            <Lock size={8} className="text-yellow-400" /> Human Edited
+                                        </span>
+                                    ) : (
+                                        <span className="glass-badge bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[9px] font-semibold px-2 py-0.5 rounded flex items-center gap-1">
+                                            <Zap size={8} className="text-cyan-400" /> AI Generated
+                                        </span>
+                                    )}
+                                    {version.generated_at && (
+                                        <span className="text-[10px] text-zinc-500 ml-auto flex items-center gap-1">
+                                            <Clock size={10} />
+                                            {new Date(version.generated_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="bg-black/20 rounded-lg p-3 border border-white/5">
+                                    <h4 className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 font-semibold">Content Preview</h4>
+                                    <p className="text-xs text-zinc-300 whitespace-pre-line leading-relaxed max-h-40 overflow-y-auto">
+                                        {version.content || <span className="italic text-zinc-600">No content</span>}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <h4 className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2 font-semibold">Contributing Info Chunks ({version.chunks?.length ?? 0})</h4>
+                                    {(!version.chunks || version.chunks.length === 0) ? (
+                                        <p className="text-[11px] text-zinc-600 italic">No source chunks associated with this version.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {version.chunks.map((chunk) => (
+                                                <div key={chunk.chunk_id} className="p-2.5 rounded-lg bg-white/2 border border-white/5 space-y-1.5 bg-white/3">
+                                                    <p className="text-xs text-zinc-300 italic leading-relaxed">"{chunk.cleaned_text || chunk.raw_text}"</p>
+                                                    <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                                                        <SourceTypeBadge sourceType={chunk.source_type} />
+                                                        <SignalLabelBadge label={chunk.signal_label ?? chunk.label} />
+                                                        {chunk.speaker && (
+                                                            <span className="text-zinc-400 bg-white/3 px-1.5 py-0.5 rounded">{chunk.speaker}</span>
+                                                        )}
+                                                        <span className="text-zinc-500 font-mono truncate max-w-[150px]" title={chunk.source_ref}>
+                                                            {chunk.source_ref}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <p className="text-xs text-zinc-500">{histDrawer.sourceCount} source chunk(s) attached to this section.</p>
-                        </div>
-                        <p className="text-xs text-zinc-600">
-                            Historical versions are stored in backend, but a dedicated section-history endpoint is not available yet.
-                        </p>
+                        ))}
                     </div>
                 )}
             </Drawer>
