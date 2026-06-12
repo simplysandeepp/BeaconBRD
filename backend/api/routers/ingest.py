@@ -74,9 +74,9 @@ def _process_and_store(sess_id: str, chunk_dicts: list):
             classified.append(
                 ClassifiedChunk(
                     session_id=sess_id,
-                    source_type=raw.get("source_type", "file"),
-                    source_ref=raw.get("source_ref", "unknown"),
-                    speaker=raw.get("speaker", "Unknown"),
+                    source_type=raw.get("source_type") or "file",
+                    source_ref=raw.get("source_ref") or "unknown",
+                    speaker=raw.get("speaker") or "Unknown",
                     raw_text=text,
                     cleaned_text=text,
                     label=label,
@@ -254,9 +254,9 @@ async def upload_file(
             classified.append(
                 ClassifiedChunk(
                     session_id=session_id,
-                    source_type=raw.get("source_type", "file"),
-                    source_ref=raw.get("source_ref", f"file:{filename}"),
-                    speaker=raw.get("speaker", "Unknown"),
+                    source_type=raw.get("source_type") or "file",
+                    source_ref=raw.get("source_ref") or f"file:{filename}",
+                    speaker=raw.get("speaker") or "Unknown",
                     raw_text=raw_text,
                     cleaned_text=raw_text,
                     label=label,

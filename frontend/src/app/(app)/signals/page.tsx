@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronDown, X, Lock, User, Link as LinkIcon,
     CheckCircle, RotateCcw, Eye, AlertTriangle, BarChart2,
-    Filter, SortDesc, Loader2
+    Filter, SortDesc, Loader2, Mail, MessageSquare, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getChunks, restoreChunk, type Chunk } from '@/lib/apiClient';
@@ -24,6 +24,7 @@ interface SignalItem {
     confidence: number;
     speaker: string;
     source: string;
+    sourceType: string;
     timestamp: string;
     text: string;
     reasoning?: string;
@@ -66,12 +67,41 @@ function chunkToSignal(c: Chunk & { label?: string }): SignalItem {
         confidence: c.confidence ?? 0,
         speaker: c.speaker ?? 'Unknown',
         source: c.source_ref ?? '',
+        sourceType: c.source_type ?? 'file',
         timestamp: '',
         text: c.cleaned_text ?? '',
         reasoning: c.reasoning,
         status: c.suppressed ? 'suppressed' : (c.flagged_for_review ? 'flagged' : 'active'),
         suppressReason: c.suppressed ? 'Semantic Noise' : undefined,
     };
+}
+
+function SourceTypeBadge({ sourceType }: { sourceType?: string }) {
+    const type = (sourceType || "").toLowerCase();
+    let label = "User Doc";
+    let bgClass = "bg-cyan-500/10 border-cyan-500/20 text-cyan-300";
+    let Icon = FileText;
+
+    if (type === "gmail" || type === "email") {
+        label = "Gmail";
+        bgClass = "bg-red-500/10 border border-red-500/20 text-red-300";
+        Icon = Mail;
+    } else if (type === "slack") {
+        label = "Slack";
+        bgClass = "bg-indigo-500/10 border border-indigo-500/20 text-indigo-300";
+        Icon = MessageSquare;
+    } else if (type === "file" || type === "doc" || type === "user_upload") {
+        label = "User Doc";
+        bgClass = "bg-blue-500/10 border border-blue-500/20 text-blue-300";
+        Icon = FileText;
+    }
+
+    return (
+        <span className={cn("glass-badge text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded flex items-center gap-1.5 border", bgClass)}>
+            <Icon size={10} className="flex-shrink-0" />
+            {label}
+        </span>
+    );
 }
 
 // ─── Badge helpers ────────────────────────────────────────────────────────────
@@ -129,6 +159,7 @@ function SignalCard({ signal, selected, onClick, onRestore }: {
             <div className="flex items-center gap-2 flex-wrap mb-3">
                 <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-medium border", LABEL_CLASS[signal.label])}>{signal.label}</span>
                 <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-medium border", PATH_CLASS[signal.path])}>{signal.path}</span>
+                <SourceTypeBadge sourceType={signal.sourceType} />
                 {signal.humanEdited && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 flex items-center gap-1">
                         <Lock size={8} /> Edited
@@ -198,6 +229,7 @@ function DetailPanel({ signal, onClose }: { signal: SignalItem; onClose: () => v
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn("glass-badge", LABEL_CLASS[signal.label])}>{signal.label}</span>
                         <span className={cn("glass-badge", PATH_CLASS[signal.path])}>{signal.path}</span>
+                        <SourceTypeBadge sourceType={signal.sourceType} />
                         {signal.humanEdited && (
                             <span className="glass-badge bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 flex items-center gap-1 text-[9px]">
                                 <Lock size={7} /> Human Edited
@@ -252,7 +284,7 @@ function DetailPanel({ signal, onClose }: { signal: SignalItem; onClose: () => v
                             <span className="text-xs text-zinc-300">{signal.speaker}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <LinkIcon size={11} className="text-zinc-500" />
+                            <SourceTypeBadge sourceType={signal.sourceType} />
                             <span className="text-xs font-mono text-zinc-400">{signal.source}</span>
                         </div>
                         <div className="text-[10px] text-zinc-600 font-mono">{signal.timestamp}</div>
