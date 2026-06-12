@@ -8,7 +8,6 @@ import {
     generateBRD,
     getBRD,
     editBRDSection,
-    approveAllBRDSections,
     type BRDSections,
     type BRDSectionMeta,
     type ValidationFlag,
@@ -39,7 +38,6 @@ interface BRDStore {
     loadBRD: (sessionId: string) => Promise<void>;
     updateSection: (sessionId: string, sectionId: string, content: string) => Promise<void>;
     acknowledgeFlag: (key: string) => void;
-    approveAll: (sessionId: string) => Promise<void>;
 }
 
 const SECTION_META: { id: keyof BRDSections; title: string }[] = [
@@ -147,21 +145,5 @@ export const useBRDStore = create<BRDStore>((set, get) => ({
                 ? state.acknowledgedFlagKeys
                 : [...state.acknowledgedFlagKeys, key],
         }));
-    },
-
-    /**
-     * Approve all sections and clear validation flags.
-     */
-    approveAll: async (sessionId) => {
-        set({ loading: true, error: null });
-        try {
-            await approveAllBRDSections(sessionId);
-            // Reload the BRD to reflect changes
-            await get().loadBRD(sessionId);
-        } catch (e) {
-            set({ error: e instanceof Error ? e.message : 'Approve all failed' });
-        } finally {
-            set({ loading: false });
-        }
     },
 }));
