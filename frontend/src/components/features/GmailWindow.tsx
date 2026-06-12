@@ -314,11 +314,23 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
         );
     };
 
+    const allCurrentPageSelected = emails.length > 0 && emails.every(e => selectedIds.includes(e.message_id));
+
     const toggleSelectAll = () => {
-        if (selectedIds.length === emails.length) {
-            setSelectedIds([]);
+        if (allCurrentPageSelected) {
+            const currentIds = emails.map(e => e.message_id);
+            setSelectedIds(prev => prev.filter(id => !currentIds.includes(id)));
         } else {
-            setSelectedIds(emails.map(e => e.message_id));
+            const currentIds = emails.map(e => e.message_id);
+            setSelectedIds(prev => {
+                const newIds = [...prev];
+                currentIds.forEach(id => {
+                    if (!newIds.includes(id)) {
+                        newIds.push(id);
+                    }
+                });
+                return newIds;
+            });
         }
     };
 
@@ -686,6 +698,19 @@ export default function GmailReplica({ onClose, onIngest, isIngesting }: GmailRe
                 {/* Main Content Area */}
                 <div className="flex-1 flex flex-col min-w-0 bg-black/20">
                     <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={toggleSelectAll}
+                                className={cn("flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 rounded-lg transition-colors text-xs font-semibold", 
+                                    allCurrentPageSelected ? "text-cyan-400" : "text-zinc-400"
+                                )}
+                                title="Select all on current page"
+                                disabled={emails.length === 0}
+                            >
+                                {allCurrentPageSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                                <span>Select All</span>
+                            </button>
+                        </div>
                         <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono">
                             <span className="mr-2">
                                 {emails.length > 0

@@ -385,7 +385,7 @@ export default function BRDPage() {
                             </>
                         ) : (
                             <>
-                                <Zap size={11} /> Generate BRD
+                                <Zap size={11} /> Generate Draft
                             </>
                         )}
                     </button>
