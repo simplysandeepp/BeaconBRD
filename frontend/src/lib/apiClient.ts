@@ -734,3 +734,8 @@ export function openSlackAuthPopup(authUrl: string): Promise<{ status: string; r
         }, 1000);
     });
 }
+
+export async function approveAllBRDSections(sessionId: string): Promise<{ message: string }> {
+    return apiFetch(`/sessions/${sessionId}/brd/approve-all`, { method: "POST" });
+}
+

@@ -429,3 +429,36 @@ def export_brd_document(session_id: str, format: str = "markdown"):
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/approve-all")
+def approve_all_sections(session_id: str):
+    """
+    Approve all BRD sections for the current session.
+    Marks all section versions for this session as human_edited and deletes validation flags.
+    """
+    try:
+        conn, db_type = get_connection()
+        try:
+            cur = conn.cursor()
+            
+            # 1. Mark all section records as human_edited
+            sections_query = "UPDATE brd_sections SET human_edited = %s WHERE session_id = %s"
+            if db_type == "sqlite":
+                sections_query = sections_query.replace("%s", "?")
+            cur.execute(sections_query, (True, session_id))
+            
+            # 2. Delete all validation flags
+            flags_query = "DELETE FROM brd_validation_flags WHERE session_id = %s"
+            if db_type == "sqlite":
+                flags_query = flags_query.replace("%s", "?")
+            cur.execute(flags_query, (session_id,))
+            
+            conn.commit()
+        finally:
+            conn.close()
+            
+        return {"message": "All sections successfully approved and validation flags cleared."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

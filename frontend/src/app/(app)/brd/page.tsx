@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
     AlertTriangle,
+    Check,
     ChevronDown,
     ChevronUp,
     Clock,
@@ -230,7 +231,7 @@ export default function BRDPage() {
     const { activeSessionId, sessions } = useSessionStore();
     const { user } = useAuth();
     const sessionId = activeSessionId ?? "";
-    const { sections, flags: apiFlags, loading, generating, error, generateAll, loadBRD, updateSection, acknowledgedFlagKeys, acknowledgeFlag } = useBRDStore();
+    const { sections, flags: apiFlags, loading, generating, error, generateAll, loadBRD, updateSection, acknowledgedFlagKeys, acknowledgeFlag, approveAll } = useBRDStore();
 
     const [flagsExpanded, setFlagsExpanded] = useState(false);
     const [flags, setFlags] = useState<ValidationFlagView[]>([]);
@@ -395,6 +396,13 @@ export default function BRDPage() {
                         className="btn-secondary w-full text-xs py-2 flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                         <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Refresh
+                    </button>
+                    <button
+                        onClick={() => approveAll(sessionId)}
+                        disabled={loading || !sessionId}
+                        className="btn-secondary w-full text-xs py-2 flex items-center justify-center gap-1.5 disabled:opacity-50 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/45 transition-colors"
+                    >
+                        <Check size={11} /> Approve All
                     </button>
                 </div>
             </aside>
