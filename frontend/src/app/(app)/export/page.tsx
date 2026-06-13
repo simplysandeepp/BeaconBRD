@@ -92,7 +92,7 @@ function countGeneratedSections(sections: Record<string, string | undefined>): {
 
 export default function ExportPage() {
     const { activeSessionId, sessions, renameSession } = useSessionStore();
-    const { acknowledgedFlagKeys } = useBRDStore();
+    const { acknowledgedFlagKeys, isApproved } = useBRDStore();
     const { user } = useAuth();
     const sessionId = activeSessionId ?? "";
     const activeSession = sessions.find((s) => s.id === sessionId);
@@ -215,10 +215,12 @@ export default function ExportPage() {
                 id: "c4",
                 label: "Human review recorded",
                 description:
-                    humanEditedSections > 0
+                    isApproved
+                        ? "BRD draft has been approved."
+                        : humanEditedSections > 0
                         ? `${humanEditedSections} section(s) were human-edited and locked.`
                         : "No section has been human-edited yet.",
-                status: humanEditedSections > 0 ? "ok" : "warn",
+                status: (isApproved || humanEditedSections > 0) ? "ok" : "warn",
                 fixHref: "/brd",
             },
             {

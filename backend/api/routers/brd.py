@@ -16,7 +16,7 @@ sys.path.append(PROJECT_ROOT)
 from brd_module.brd_pipeline import run_brd_generation
 from brd_module.validator import validate_brd
 from brd_module.exporter import export_brd, export_brd_to_docx, export_brd_to_pdf, WEASYPRINT_AVAILABLE
-from brd_module.storage import get_latest_brd_sections, store_brd_section, get_connection
+from brd_module.storage import get_latest_brd_sections, store_brd_section, get_connection, clear_validation_flags
 from brd_module.hitl.orchestrator import submit_ad_hoc_prompt
 
 router = APIRouter(
@@ -344,6 +344,19 @@ def edit_brd_section(session_id: str, section_name: str, body: EditSectionReques
         return {"message": f"Section {section_name} updated successfully by human."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/approve")
+def approve_brd(session_id: str):
+    """
+    Approve all sections/changes in the BRD draft by clearing all validation flags.
+    Does not lock any sections.
+    """
+    try:
+        clear_validation_flags(session_id)
+        return {"message": "All validation flags cleared/approved successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/sections/{section_name}/history")
 def get_brd_section_history(session_id: str, section_name: str):

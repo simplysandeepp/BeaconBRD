@@ -8,6 +8,7 @@ import {
     generateBRD,
     getBRD,
     editBRDSection,
+    approveBRD,
     type BRDSections,
     type BRDSectionMeta,
     type ValidationFlag,
@@ -34,10 +35,12 @@ interface BRDStore {
     loading: boolean;
     generating: boolean;
     error: string | null;
+    isApproved: boolean;
     generateAll: (sessionId: string) => Promise<void>;
     loadBRD: (sessionId: string) => Promise<void>;
     updateSection: (sessionId: string, sectionId: string, content: string) => Promise<void>;
     acknowledgeFlag: (key: string) => void;
+    approveAll: (sessionId: string) => Promise<void>;
 }
 
 const SECTION_META: { id: keyof BRDSections; title: string }[] = [
@@ -72,6 +75,7 @@ export const useBRDStore = create<BRDStore>((set, get) => ({
     loading: false,
     generating: false,
     error: null,
+    isApproved: false,
 
     /**
      * Trigger BRD generation.
@@ -80,6 +84,10 @@ export const useBRDStore = create<BRDStore>((set, get) => ({
     generateAll: async (sessionId) => {
         set({ generating: true, error: null });
         try {
+            if (typeof window !== "undefined") {
+                localStorage.removeItem(`brd_approved_${sessionId}`);
+            }
+            set({ isApproved: false });
             const res = await generateBRD(sessionId);
             set({ snapshotId: res.snapshot_id });
             // Once done, immediately load the results
@@ -98,10 +106,12 @@ export const useBRDStore = create<BRDStore>((set, get) => ({
         set({ loading: true, error: null });
         try {
             const data = await getBRD(sessionId);
+            const approved = typeof window !== "undefined" ? localStorage.getItem(`brd_approved_${sessionId}`) === "true" : false;
             set({
                 sections: sectionsFromAPI(data.sections, data.section_meta ?? {}),
                 flags: data.flags,
                 snapshotId: data.snapshot_id ?? get().snapshotId,
+                isApproved: approved,
             });
         } catch (e) {
             set({ error: e instanceof Error ? e.message : 'Failed to load BRD' });
@@ -145,5 +155,22 @@ export const useBRDStore = create<BRDStore>((set, get) => ({
                 ? state.acknowledgedFlagKeys
                 : [...state.acknowledgedFlagKeys, key],
         }));
+    },
+
+    approveAll: async (sessionId) => {
+        set({ loading: true, error: null });
+        try {
+            await approveBRD(sessionId);
+            if (typeof window !== "undefined") {
+                localStorage.setItem(`brd_approved_${sessionId}`, "true");
+            }
+            set({ isApproved: true });
+            // Reload the BRD to clear the flags in the UI
+            await get().loadBRD(sessionId);
+        } catch (e) {
+            set({ error: e instanceof Error ? e.message : 'Approve failed' });
+        } finally {
+            set({ loading: false });
+        }
     },
 }));

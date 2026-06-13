@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, Loader2, Lock, Save, Sparkles } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Lock, Save, Sparkles, Check } from "lucide-react";
 import { useBRDStore } from "@/store/useBRDStore";
 import { exportBRD } from "@/lib/apiClient";
 
@@ -15,6 +15,7 @@ export default function BRDEditor({ projectId }: { projectId: string }) {
         loadBRD,
         updateSection,
         generateAll,
+        approveAll,
     } = useBRDStore();
 
     const [activeSectionId, setActiveSectionId] = useState<string>("executive_summary");
@@ -107,6 +108,15 @@ export default function BRDEditor({ projectId }: { projectId: string }) {
                             {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                             {generating ? "Generating..." : "Generate BRD"}
                         </button>
+                        <button
+                            onClick={() => approveAll(projectId)}
+                            disabled={loading || generating || !projectId}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 rounded-lg text-sm transition-colors disabled:opacity-50"
+                        >
+                            <Check size={14} />
+                            Approve All
+                        </button>
+
                         <button
                             onClick={handleSave}
                             disabled={saving || loading || !activeSection}

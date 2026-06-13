@@ -453,6 +453,15 @@ export async function editBRDSection(
     });
 }
 
+export async function approveBRD(
+    sessionId: string
+): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/sessions/${sessionId}/brd/approve`, {
+        method: "POST",
+    });
+}
+
+
 export interface SectionHistoryVersion {
     version_number: number;
     snapshot_id: string | null;

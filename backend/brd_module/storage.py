@@ -402,3 +402,17 @@ def delete_chunks_by_source_ref_prefix(session_id: str, prefix: str):
         conn.commit()
     finally:
         conn.close()
+
+def clear_validation_flags(session_id: str):
+    """Deletes all validation flags for a given session."""
+    conn, db_type = get_connection()
+    try:
+        cur = conn.cursor()
+        query = "DELETE FROM brd_validation_flags WHERE session_id = %s"
+        if db_type == "sqlite":
+            query = query.replace("%s", "?")
+        cur.execute(query, (session_id,))
+        conn.commit()
+    finally:
+        conn.close()
+

@@ -17,6 +17,7 @@ import {
     Zap,
     Mail,
     MessageSquare,
+    Check,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -279,7 +280,7 @@ export default function BRDPage() {
     const { activeSessionId, sessions } = useSessionStore();
     const { user } = useAuth();
     const sessionId = activeSessionId ?? "";
-    const { sections, flags: apiFlags, loading, generating, error, generateAll, loadBRD, updateSection, acknowledgedFlagKeys, acknowledgeFlag } = useBRDStore();
+    const { sections, flags: apiFlags, loading, generating, error, generateAll, loadBRD, updateSection, acknowledgedFlagKeys, acknowledgeFlag, approveAll } = useBRDStore();
 
     const [flagsExpanded, setFlagsExpanded] = useState(false);
     const [flags, setFlags] = useState<ValidationFlagView[]>([]);
@@ -466,6 +467,14 @@ export default function BRDPage() {
                     >
                         <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Refresh
                     </button>
+                    <button
+                        onClick={() => approveAll(sessionId)}
+                        disabled={loading || generating || !sessionId}
+                        className="btn-secondary w-full text-xs py-2 flex items-center justify-center gap-1.5 disabled:opacity-50 border-white/15 hover:border-white/25 text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                        <Check size={11} /> Approve All
+                    </button>
+
                 </div>
             </aside>
 
