@@ -101,6 +101,14 @@ export default function ExportPage() {
     const [proceedAnyway, setProceedAnyway] = useState(false);
     const [downloading, setDownloading] = useState<ExportFormat | null>(null);
     const [exportError, setExportError] = useState<string | null>(null);
+    const [selectedTheme, setSelectedTheme] = useState<string>("Corporate Professional");
+    
+    const THEMES = [
+        "Corporate Professional",
+        "Modern Startup",
+        "Minimalist Clean",
+        "High-Contrast Accessible"
+    ];
 
     // ── Rename modal state ──
     const [renameOpen, setRenameOpen] = useState(false);
@@ -244,7 +252,7 @@ export default function ExportPage() {
         setDownloading(format);
         setExportError(null);
         try {
-            await exportBRD(sessionId, format);
+            await exportBRD(sessionId, format, selectedTheme);
         } catch (e) {
             setExportError(e instanceof Error ? e.message : "Export failed");
         } finally {
@@ -410,6 +418,24 @@ export default function ExportPage() {
                             </motion.div>
                         );
                     })}
+                </div>
+                
+                <h2 className="text-sm font-semibold text-zinc-200 mt-6 mb-3">Document Theme (HTML/PDF)</h2>
+                <div className="flex flex-wrap gap-2">
+                    {THEMES.map((theme) => (
+                        <button
+                            key={theme}
+                            onClick={() => setSelectedTheme(theme)}
+                            className={cn(
+                                "px-3 py-1.5 text-xs rounded-lg border transition-all",
+                                selectedTheme === theme
+                                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-100"
+                                    : "bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                            )}
+                        >
+                            {theme}
+                        </button>
+                    ))}
                 </div>
             </motion.div>
 

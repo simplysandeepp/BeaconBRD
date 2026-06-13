@@ -9,14 +9,21 @@ from datetime import datetime, timezone
 import markdown
 import re
 import os
+import tempfile
+import urllib.request
+import base64
 from io import BytesIO
+
+try:
+    import pypandoc
+    PYPANDOC_AVAILABLE = True
+except ImportError:
+    PYPANDOC_AVAILABLE = False
 
 try:
     from weasyprint import HTML, CSS
     WEASYPRINT_AVAILABLE = True
 except (ImportError, OSError):
-    # OSError occurs on Windows when native GLib/Pango DLLs are missing.
-    # PDF export will be unavailable but all other endpoints still work.
     WEASYPRINT_AVAILABLE = False
 
 try:
@@ -29,7 +36,83 @@ try:
 except ImportError:
     PYTHON_DOCX_AVAILABLE = False
 
-def export_brd(session_id: str, title: str = "Business Requirements Document") -> str:
+THEMES_CSS = {
+    "Corporate Professional": """
+        body { font-family: 'Inter', -apple-system, sans-serif; color: #334155; line-height: 1.7; background-color: #ffffff; padding: 40px; }
+        h1 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; font-size: 2.25rem; margin-bottom: 0.5rem; }
+        h2 { color: #1e40af; border-left: 4px solid #3b82f6; padding-left: 0.75rem; margin-top: 2rem; }
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.95rem; }
+        table th { background-color: #f1f5f9; text-align: left; padding: 12px 16px; border-bottom: 2px solid #cbd5e1; }
+        table td { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+        blockquote { background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 1rem; color: #92400e; }
+        svg { max-width: 100%; height: auto; margin: 2rem 0; border: 1px solid #e2e8f0; border-radius: 8px; }
+        code { background-color: #f5f5f5; color: #d63384; padding: 4px 8px; border-radius: 3px; font-family: 'Courier New', 'Consolas', monospace; }
+        pre { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; overflow-x: auto; border-left: 4px solid #0056b3; }
+        pre code { background-color: transparent; color: #333; padding: 0; }
+    """,
+    "Modern Startup": """
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; color: #2d3748; line-height: 1.8; background-color: #faf5ff; padding: 40px; }
+        h1 { color: #4c1d95; text-align: center; font-size: 2.5rem; font-weight: 800; }
+        h2 { color: #6d28d9; border-bottom: 2px dashed #c4b5fd; padding-bottom: 0.5rem; margin-top: 2.5rem; }
+        table { width: 100%; border-radius: 8px; overflow: hidden; margin: 1.5rem 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        table th { background-color: #8b5cf6; color: white; padding: 14px; text-align: left; }
+        table td { padding: 14px; background-color: white; border-bottom: 1px solid #ede9fe; }
+        blockquote { background-color: #f3e8ff; border-left: 4px solid #a855f7; padding: 1rem; border-radius: 0 8px 8px 0; }
+        svg { max-width: 100%; height: auto; margin: 2rem 0; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-radius: 12px; }
+        code { background-color: #ede9fe; color: #7c3aed; padding: 2px 6px; border-radius: 4px; }
+    """,
+    "Minimalist Clean": """
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; line-height: 1.6; padding: 40px; max-width: 800px; margin: 0 auto; }
+        h1, h2, h3 { color: #000; font-weight: 600; }
+        h1 { font-size: 2.5rem; margin-bottom: 2rem; }
+        h2 { font-size: 1.5rem; margin-top: 2.5rem; margin-bottom: 1rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
+        table { width: 100%; border-collapse: collapse; margin: 2rem 0; }
+        table th { border-bottom: 2px solid #000; padding: 10px; text-align: left; }
+        table td { border-bottom: 1px solid #eee; padding: 10px; }
+        blockquote { border-left: 2px solid #000; padding-left: 1.5rem; font-style: italic; color: #555; }
+        svg { max-width: 100%; height: auto; margin: 2rem 0; }
+        code { background-color: #f9f9f9; border: 1px solid #eee; padding: 2px 5px; font-family: monospace; }
+    """,
+    "High-Contrast Accessible": """
+        body { font-family: Verdana, sans-serif; color: #ffffff; background-color: #121212; line-height: 1.8; padding: 40px; font-size: 18px; }
+        h1 { color: #ffff00; font-size: 2.5rem; text-decoration: underline; }
+        h2 { color: #00ff00; font-size: 2rem; border-left: 6px solid #00ff00; padding-left: 10px; }
+        h3 { color: #00ffff; font-size: 1.5rem; }
+        table { width: 100%; border-collapse: collapse; margin: 2rem 0; border: 2px solid #ffffff; }
+        table th { background-color: #333333; color: #ffffff; padding: 15px; border: 2px solid #ffffff; }
+        table td { padding: 15px; border: 2px solid #ffffff; }
+        blockquote { background-color: #000000; border: 2px solid #ff00ff; padding: 15px; color: #ffffff; }
+        a { color: #ffff00; text-decoration: underline; font-weight: bold; }
+        svg { max-width: 100%; height: auto; background-color: #ffffff; margin: 2rem 0; padding: 10px; border: 4px solid #ffff00; }
+        code { background-color: #000000; color: #00ff00; padding: 4px 8px; border: 1px solid #00ff00; }
+        pre { background-color: #000000; border: 2px solid #00ff00; padding: 15px; }
+    """
+}
+
+def get_theme_css(theme_name):
+    return THEMES_CSS.get(theme_name, THEMES_CSS["Corporate Professional"])
+
+def fetch_mermaid_svg(mermaid_text):
+    try:
+        encoded = base64.b64encode(mermaid_text.encode('utf-8')).decode('utf-8')
+        url = f"https://mermaid.ink/svg/{encoded}?bgColor=F8FAFC"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            return response.read().decode('utf-8')
+    except Exception as e:
+        return f"<p><i>Error loading SVG chart: {e}</i></p>"
+
+def replace_mermaid_with_svg(markdown_content):
+    pattern = r'```mermaid\\n(.*?)```'
+    def replace(match):
+        mermaid_code = match.group(1)
+        if "%%{init:" not in mermaid_code:
+            mermaid_code = '%%{init: { "theme": "base", "themeVariables": { "fontSize": "22px", "fontFamily": "Inter, sans-serif" } } }%%\\n' + mermaid_code
+        svg = fetch_mermaid_svg(mermaid_code)
+        return f"\\n{svg}\\n"
+    return re.sub(pattern, replace, markdown_content, flags=re.DOTALL)
+
+def export_brd(session_id: str, title: str = "Business Requirements Document", theme: str = "Corporate Professional") -> str:
     """
     Fetches the latest BRD sections and any active validation flags,
     and returns a formatted Markdown string.
@@ -52,6 +135,7 @@ def export_brd(session_id: str, title: str = "Business Requirements Document") -
     doc.append(f"# {title}")
     doc.append(f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     doc.append(f"**Session ID:** `{session_id}`")
+    doc.append(f"**Theme Applied:** `{theme}`")
     doc.append("---\n")
     
     # 1. Fetch Validation Flags
@@ -87,7 +171,13 @@ def export_brd(session_id: str, title: str = "Business Requirements Document") -
     
     # 2. Compile Sections
     for db_key, display_title in section_order:
-        content = sections.get(db_key, "*(Section not generated)*")
+        try:
+            content = sections.get(db_key)
+            if not content or content.strip() == "":
+                content = "> **Warning:** Section data is insufficient or generation failed."
+        except Exception as e:
+            content = f"> **Error:** Failed to retrieve this section: {str(e)}"
+        
         doc.append(f"## {display_title}\n")
         doc.append(content)
         doc.append("\n---\n")
@@ -95,314 +185,67 @@ def export_brd(session_id: str, title: str = "Business Requirements Document") -
     return "\n".join(doc)
 
 
-def export_brd_to_pdf(session_id: str, output_file: str = None, title: str = "Business Requirements Document") -> bytes:
+def export_brd_to_pdf(session_id: str, output_file: str = None, title: str = "Business Requirements Document", theme: str = "Corporate Professional") -> bytes:
     """
     Fetches the latest BRD sections and exports as PDF with enhanced formatting.
-    
-    Automatically detects and styles:
-    - Headings (H1-H6) with progressive sizing and colors
-    - Bold text (**text** or __text__) in dark color
-    - Italic text (*text* or _text_) in gray
-    - Code blocks with background color
-    - Tables with alternating row colors
-    - Blockquotes with left border and color
-    - Links with blue color
-    
-    Args:
-        session_id: Session identifier
-        output_file: Optional file path to save PDF. If not provided, returns bytes.
-        title: Document title
-        
-    Returns:
-        PDF bytes if output_file is None, otherwise None and saves to file
     """
-    if not WEASYPRINT_AVAILABLE:
-        raise ImportError(
-            "weasyprint is required for PDF export. "
-            "Install it with: pip install weasyprint"
-        )
+    if not WEASYPRINT_AVAILABLE and not PYPANDOC_AVAILABLE:
+        raise ImportError("Neither weasyprint nor pypandoc are available for PDF export.")
     
     # Get markdown content
-    markdown_content = export_brd(session_id, title)
+    markdown_content = export_brd(session_id, title, theme=theme)
     
-    # Convert markdown to HTML with enhanced markdown extensions
-    html_content = markdown.markdown(
-        markdown_content,
-        extensions=[
-            'tables',
-            'fenced_code',
-            'toc',
-            'extra',           # Includes abbreviations, footnotes, definition lists
-            'codehilite',      # Better code block styling
-        ]
-    )
+    # SVG processing
+    markdown_content = replace_mermaid_with_svg(markdown_content)
     
-    # Post-process to add color support for highlighted keywords
-    html_content = _add_color_highlights(html_content)
+    css_content = get_theme_css(theme)
     
-    # Create styled HTML document with comprehensive CSS for all markdown elements
-    styled_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            * {{
-                margin: 0;
-                padding: 0;
-            }}
+    if WEASYPRINT_AVAILABLE:
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=['tables', 'fenced_code', 'toc', 'extra', 'codehilite']
+        )
+        html_content = _add_color_highlights(html_content)
+        styled_html = f"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>{css_content}</style></head><body>{html_content}</body></html>"
+        
+        pdf_bytes = HTML(string=styled_html).write_pdf()
+        if output_file:
+            with open(output_file, 'wb') as f:
+                f.write(pdf_bytes)
+        return pdf_bytes
+    elif PYPANDOC_AVAILABLE:
+        # Fallback to pypandoc HTML generation since pdf generation requires external latex engines which might fail
+        with tempfile.NamedTemporaryFile(suffix='.css', delete=False, mode='w', encoding='utf-8') as f_css:
+            f_css.write(css_content)
+            css_path = f_css.name
             
-            body {{
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                line-height: 1.7;
-                color: #2c3e50;
-                background-color: #ffffff;
-                padding: 40px;
-            }}
-            
-            /* Heading Styles */
-            h1 {{
-                font-size: 32px;
-                color: #0056b3;
-                border-bottom: 4px solid #0056b3;
-                padding-bottom: 15px;
-                margin: 40px 0 30px 0;
-                font-weight: 700;
-                page-break-after: avoid;
-            }}
-            
-            h2 {{
-                font-size: 24px;
-                color: #003d82;
-                border-left: 6px solid #0056b3;
-                padding-left: 15px;
-                margin: 30px 0 20px 0;
-                font-weight: 700;
-                page-break-after: avoid;
-            }}
-            
-            h3 {{
-                font-size: 18px;
-                color: #1a5490;
-                padding-left: 10px;
-                margin: 20px 0 15px 0;
-                font-weight: 600;
-                page-break-after: avoid;
-            }}
-            
-            h4 {{
-                font-size: 16px;
-                color: #2c5aa0;
-                margin: 15px 0 10px 0;
-                font-weight: 600;
-                page-break-after: avoid;
-            }}
-            
-            h5, h6 {{
-                font-size: 14px;
-                color: #444;
-                margin: 10px 0 8px 0;
-                font-weight: 600;
-            }}
-            
-            /* Bold Text */
-            strong, b {{
-                color: #1a1a1a;
-                font-weight: 700;
-            }}
-            
-            /* Italic Text */
-            em, i {{
-                color: #555;
-                font-style: italic;
-            }}
-            
-            /* Paragraph Styles */
-            p {{
-                margin: 12px 0;
-                text-align: justify;
-            }}
-            
-            /* Link Styles */
-            a {{
-                color: #0056b3;
-                text-decoration: underline;
-                font-weight: 500;
-            }}
-            
-            /* Code Styles */
-            code {{
-                background-color: #f5f5f5;
-                color: #d63384;
-                padding: 4px 8px;
-                border-radius: 3px;
-                font-family: 'Courier New', 'Consolas', monospace;
-                font-size: 13px;
-            }}
-            
-            /* Code Blocks */
-            pre {{
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 5px;
-                padding: 15px;
-                overflow-x: auto;
-                border-left: 4px solid #0056b3;
-                margin: 15px 0;
-                page-break-inside: avoid;
-            }}
-            
-            pre code {{
-                background-color: transparent;
-                color: #333;
-                padding: 0;
-                border-radius: 0;
-            }}
-            
-            /* Table Styles */
-            table {{
-                border-collapse: collapse;
-                width: 100%;
-                margin: 20px 0;
-                page-break-inside: avoid;
-            }}
-            
-            th {{
-                background-color: #0056b3;
-                color: white;
-                padding: 12px;
-                text-align: left;
-                font-weight: 600;
-                border: 1px solid #003d82;
-            }}
-            
-            td {{
-                padding: 10px 12px;
-                border: 1px solid #ddd;
-            }}
-            
-            tr:nth-child(even) {{
-                background-color: #f9f9f9;
-            }}
-            
-            tr:hover {{
-                background-color: #f0f8ff;
-            }}
-            
-            /* Blockquote Styles */
-            blockquote {{
-                border-left: 5px solid #0056b3;
-                padding-left: 20px;
-                margin-left: 0;
-                margin-right: 0;
-                color: #555;
-                font-style: italic;
-                background-color: #f0f8ff;
-                padding: 12px 15px;
-                border-radius: 4px;
-                margin: 15px 0;
-            }}
-            
-            blockquote p {{
-                margin: 5px 0;
-            }}
-            
-            /* List Styles */
-            ul, ol {{
-                margin: 15px 0;
-                padding-left: 30px;
-            }}
-            
-            li {{
-                margin: 8px 0;
-                line-height: 1.6;
-            }}
-            
-            /* Horizontal Rule */
-            hr {{
-                border: none;
-                border-top: 2px solid #0056b3;
-                margin: 30px 0;
-            }}
-            
-            /* Metadata */
-            .metadata {{
-                background-color: #f0f8ff;
-                padding: 12px 15px;
-                border-radius: 4px;
-                margin-bottom: 20px;
-                font-size: 0.9em;
-                color: #555;
-            }}
-            
-            /* Highlighted/Important Text */
-            .highlight {{
-                background-color: #fff3cd;
-                padding: 2px 5px;
-                border-radius: 3px;
-                color: #856404;
-            }}
-            
-            .highlight-critical {{
-                background-color: #f8d7da;
-                padding: 2px 5px;
-                border-radius: 3px;
-                color: #721c24;
-                font-weight: 600;
-            }}
-            
-            .highlight-success {{
-                background-color: #d4edda;
-                padding: 2px 5px;
-                border-radius: 3px;
-                color: #155724;
-            }}
-            
-            .highlight-info {{
-                background-color: #d1ecf1;
-                padding: 2px 5px;
-                border-radius: 3px;
-                color: #0c5460;
-            }}
-            
-            /* Page Break Control */
-            @page {{
-                size: A4;
-                margin: 2cm;
-            }}
-            
-            @media print {{
-                h1, h2, h3 {{
-                    page-break-after: avoid;
-                }}
-                pre {{
-                    page-break-inside: avoid;
-                }}
-                table {{
-                    page-break-inside: avoid;
-                }}
-                blockquote {{
-                    page-break-inside: avoid;
-                }}
-            }}
-        </style>
-    </head>
-    <body>
-        {html_content}
-    </body>
-    </html>
-    """
-    
-    # Generate PDF
-    pdf_bytes = HTML(string=styled_html).write_pdf()
-    
-    # Save to file if path provided
-    if output_file:
-        with open(output_file, 'wb') as f:
-            f.write(pdf_bytes)
-        return None
-    
-    return pdf_bytes
+        try:
+            if output_file is None:
+                with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f_pdf:
+                    tmp_pdf_path = f_pdf.name
+                
+                try:
+                    pypandoc.convert_text(markdown_content, 'pdf', format='markdown', outputfile=tmp_pdf_path, extra_args=[f"--css={css_path}"])
+                    with open(tmp_pdf_path, 'rb') as f:
+                        pdf_bytes = f.read()
+                except Exception:
+                    # Fallback to HTML if PDF engine is missing
+                    pypandoc.convert_text(markdown_content, 'html', format='markdown', outputfile=tmp_pdf_path, extra_args=[f"--css={css_path}", "-s", "--metadata", "pagetitle=BeaconBRD"])
+                    with open(tmp_pdf_path, 'rb') as f:
+                        pdf_bytes = f.read()
+                        
+                os.remove(tmp_pdf_path)
+                return pdf_bytes
+            else:
+                try:
+                    pypandoc.convert_text(markdown_content, 'pdf', format='markdown', outputfile=output_file, extra_args=[f"--css={css_path}"])
+                except Exception:
+                    pypandoc.convert_text(markdown_content, 'html', format='markdown', outputfile=output_file, extra_args=[f"--css={css_path}", "-s", "--metadata", "pagetitle=BeaconBRD"])
+                
+                with open(output_file, 'rb') as f:
+                    return f.read()
+        finally:
+            os.remove(css_path)
 
 
 def _add_color_highlights(html_content: str) -> str:

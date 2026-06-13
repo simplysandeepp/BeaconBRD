@@ -653,9 +653,11 @@ export type ExportFormat = "markdown" | "html" | "docx" | "pdf";
 
 export async function exportBRD(
     sessionId: string,
-    format: ExportFormat = "markdown"
+    format: ExportFormat = "markdown",
+    theme: string = "Corporate Professional"
 ): Promise<void> {
-    const res = await fetch(joinUrl(BASE, `/sessions/${sessionId}/brd/export?format=${format}`), {
+    const encodedTheme = encodeURIComponent(theme);
+    const res = await fetch(joinUrl(BASE, `/sessions/${sessionId}/brd/export?format=${format}&theme=${encodedTheme}`), {
         credentials: "include",
     });
     if (!res.ok) {
