@@ -4,13 +4,18 @@ Bridges Google ADK's async runner to FastAPI SSE endpoints.
 
 Responsibilities:
 1. Fetch signals from DB and inject into ADK session state
-2. Run the ADK workflow via Runner.run_async()
+2. Run each ADK agent individually with per-agent error isolation
 3. Iterative refinement: re-run conflicting sections, then re-validate
 4. After completion, persist agent outputs to DB (brd_sections + brd_validation_flags)
+
+Key design decision: Each agent runs as a separate Runner.call() so that
+if one agent fails (rate limit, context length, etc.), the other agents
+still complete. This mirrors the legacy ThreadPoolExecutor approach.
 """
 import json
 import asyncio
 import sys
+import os
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 
@@ -29,16 +34,17 @@ from brd_module.storage import (
 )
 from brd_module.validator import store_validation_flag
 from brd_module.adk_workflow import build_workflow
+from brd_module.adk_agents import create_agents
+from brd_module.adk_config import get_adk_model, get_session_service
 from google.adk.sessions import InMemorySessionService
+from google.adk.runners import Runner
 
 # Maximum refinement iterations before giving up
 MAX_REFINEMENT_ROUNDS = 2
 
 
 def _map_adk_event(event: Any) -> Optional[Dict[str, str]]:
-    """
-    Map an ADK Event to our existing SSE event format.
-    """
+    """Map an ADK Event to our existing SSE event format."""
     action = getattr(event, "action", None) or getattr(event, "type", "message")
     agent_name = getattr(event, "agent_name", None) or getattr(event, "source", "unknown")
 
@@ -74,11 +80,13 @@ async def run_brd_generation_adk(
     snapshot_id: Optional[str] = None,
 ) -> str:
     """
-    Run the BRD workflow via Google ADK with iterative refinement.
+    Run the BRD workflow via Google ADK with per-agent error isolation
+    and iterative refinement.
 
     Pipeline:
-      Round 0: All 7 section agents run in parallel → Executive Summary → Validation
-      Round 1+: If conflicts found, re-run only conflicting sections with conflict context → Re-validate
+      Round 0: All 7 section agents run individually (per-agent error isolation)
+              → Executive Summary → Validation
+      Round 1+: If conflicts found, re-run only conflicting sections with context → Re-validate
       Max refinement rounds: MAX_REFINEMENT_ROUNDS (default 2)
     """
     print(f"[ADK:{session_id}] Starting BRD Generation via Google ADK...")
@@ -107,15 +115,13 @@ async def run_brd_generation_adk(
 
     print(f"[ADK:{session_id}] Loaded {len(signals)} signals.")
 
-    # Build the ADK workflow and runner
-    from brd_module.adk_config import get_session_service
-    from brd_module.adk_workflow import build_workflow
-
-    runner, session_service = build_workflow()
+    # Build model and agents
+    model = get_adk_model()
+    agents = create_agents(model)
+    session_service = get_session_service()
 
     # Inject signal data into ADK session state
     signals_json = json.dumps([s.model_dump(mode="json") for s in signals])
-
     initial_state = {
         "signals_json": signals_json,
         "snapshot_id": snapshot_id,
@@ -124,18 +130,29 @@ async def run_brd_generation_adk(
         "unique_sources": str(len(set(s.source_ref for s in signals if s.source_ref))),
     }
 
-    # ── Round 0: Full pipeline run ──
-    print(f"[ADK:{session_id}] Round 0: Launching all agents in parallel...")
-    emit({"type": "agents_launched", "count": 9, "session_id": session_id, "round": 0})
+    # ── Round 0: Run all 7 section agents individually ──
+    print(f"[ADK:{session_id}] Round 0: Launching all 7 agents...")
+    emit({"type": "agents_launched", "count": 7, "session_id": session_id, "round": 0})
 
-    session = await _run_workflow_round(
-        runner, session_service, session_id, snapshot_id, initial_state, emit, round_num=0
+    agent_results = await _run_all_agents_with_resilience(
+        session_service, agents, session_id, snapshot_id,
+        signals_json, initial_state, emit, round_num=0
+    )
+
+    # ── Run Executive Summary + Validation ──
+    print(f"[ADK:{session_id}] Round 0: Executive Summary + Validation...")
+    await _run_sequential_agents(
+        session_service, agents, session_id, snapshot_id,
+        ["executive_summary", "validation"], initial_state, emit, round_num=0
     )
 
     # ── Iterative refinement rounds ──
     for round_num in range(1, MAX_REFINEMENT_ROUNDS + 1):
         # Read validation flags from session state
-        state = session.state if session else {}
+        session = await _get_session(session_service, session_id, snapshot_id)
+        if session is None:
+            break
+        state = session.state
         validation_flags_raw = state.get("validation_flags", "")
 
         if not validation_flags_raw or validation_flags_raw.strip() in ("", "[]", '{"issues": []}'):
@@ -181,10 +198,15 @@ async def run_brd_generation_adk(
         conflict_context = _build_conflict_context(state, issues)
 
         # Run only the conflicting agents with conflict context
-        # We use a subset workflow for refinement
-        session = await _run_refinement_round(
-            session_service, runner, session_id, snapshot_id,
+        await _run_refinement_agents(
+            session_service, agents, session_id, snapshot_id,
             conflict_sections, conflict_context, emit, round_num
+        )
+
+        # Re-run validation
+        await _run_single_agent(
+            session_service, agents["validation"], "validation",
+            session_id, snapshot_id, initial_state, emit, round_num
         )
 
         print(f"[ADK:{session_id}] Round {round_num}: Refinement complete.")
@@ -198,79 +220,151 @@ async def run_brd_generation_adk(
     return snapshot_id
 
 
-async def _run_workflow_round(
-    runner, session_service: InMemorySessionService,
-    session_id: str, snapshot_id: str,
-    initial_state: dict, emit: Callable, round_num: int,
-):
-    """Run one full round of the ADK workflow (all agents in parallel → synthesis)."""
-    try:
-        loop = asyncio.new_event_loop()
+async def _run_all_agents_with_resilience(
+    session_service: InMemorySessionService,
+    agents: dict,
+    session_id: str,
+    snapshot_id: str,
+    signals_json: str,
+    initial_state: dict,
+    emit: Callable,
+    round_num: int,
+) -> dict:
+    """
+    Run each section agent individually so one failure doesn't kill the pipeline.
+    This is the key resilience pattern — each agent is isolated.
+    """
+    results = {}
+    section_agents = {k: v for k, v in agents.items()
+                     if k not in ("executive_summary", "validation")}
 
-        async def _run():
-            sess = await session_service.get_session(
-                user_id=session_id, session_id=snapshot_id,
+    for agent_key, agent in section_agents.items():
+        emit({"type": "agent_started", "agent": agent_key, "session_id": session_id, "round": round_num})
+        try:
+            await _run_single_agent(
+                session_service, agent, agent_key,
+                session_id, snapshot_id, initial_state, emit, round_num
             )
-            if sess is None:
-                sess = await session_service.create_session(
-                    user_id=session_id, session_id=snapshot_id, state=initial_state,
-                )
-            else:
-                # Merge initial state (preserve signals, update other keys)
-                for key, val in initial_state.items():
-                    sess.state[key] = val
+            results[agent_key] = "completed"
+            emit({"type": "agent_completed", "agent": agent_key, "session_id": session_id, "round": round_num})
+            print(f"  [ADK:{session_id}] Agent '{agent_key}' completed successfully.")
 
-            async for event in runner.run_async(
-                user_id=session_id,
-                session_id=snapshot_id,
-                new_message="Generate the complete BRD using the signals stored in session.state['signals_json']. "
-                            "Follow each agent's instructions for reading inputs and storing outputs in session state.",
-            ):
-                progress_event = _map_adk_event(event)
-                if progress_event:
-                    progress_event["session_id"] = session_id
-                    progress_event["round"] = round_num
-                    emit(progress_event)
+        except Exception as e:
+            # Agent failed — store error placeholder, continue with other agents
+            error_msg = f"Error generating section: {str(e)}"
+            results[agent_key] = error_msg
+            emit({
+                "type": "agent_failed",
+                "agent": agent_key,
+                "session_id": session_id,
+                "round": round_num,
+                "error": str(e),
+            })
+            print(f"  [ADK:{session_id}] Agent '{agent_key}' FAILED: {e}")
+            continue  # <-- KEY: don't crash, move to next agent
 
-        loop.run_until_complete(_run())
-        loop.close()
-
-    except Exception as e:
-        print(f"[ADK:{session_id}] Round {round_num} error: {e}")
-        emit({"type": "error", "session_id": session_id, "message": str(e)})
-        raise
-
-    # Return the session with updated state
-    try:
-        loop = asyncio.new_event_loop()
-        session = loop.run_until_complete(
-            session_service.get_session(user_id=session_id, session_id=snapshot_id)
-        )
-        loop.close()
-        return session
-    except Exception:
-        return None
+    return results
 
 
-async def _run_refinement_round(
-    session_service: InMemorySessionService, runner,
-    session_id: str, snapshot_id: str,
-    conflict_sections: set, conflict_context: str,
-    emit: Callable, round_num: int,
+async def _run_sequential_agents(
+    session_service: InMemorySessionService,
+    agents: dict,
+    session_id: str,
+    snapshot_id: str,
+    agent_keys: list,
+    initial_state: dict,
+    emit: Callable,
+    round_num: int,
+):
+    """Run a list of agents sequentially (e.g., executive_summary → validation)."""
+    for agent_key in agent_keys:
+        emit({"type": "agent_started", "agent": agent_key, "session_id": session_id, "round": round_num})
+        try:
+            await _run_single_agent(
+                session_service, agents[agent_key], agent_key,
+                session_id, snapshot_id, initial_state, emit, round_num
+            )
+            emit({"type": "agent_completed", "agent": agent_key, "session_id": session_id, "round": round_num})
+        except Exception as e:
+            emit({
+                "type": "agent_failed",
+                "agent": agent_key,
+                "session_id": session_id,
+                "round": round_num,
+                "error": str(e),
+            })
+            print(f"  [ADK:{session_id}] Agent '{agent_key}' FAILED: {e}")
+
+
+async def _run_single_agent(
+    session_service: InMemorySessionService,
+    agent,
+    agent_key: str,
+    session_id: str,
+    snapshot_id: str,
+    initial_state: dict,
+    emit: Callable,
+    round_num: int,
+    additional_context: str = "",
 ):
     """
-    Re-run only the conflicting agents with conflict context.
-
-    Uses ADK's direct agent invocation (not the full workflow graph) so we can
-    target specific agents with specific context.
+    Run a single ADK agent in its own Runner call.
+    This isolates failures — if this agent fails, it doesn't affect others.
     """
-    from brd_module.adk_agents import create_agents
-    from brd_module.adk_config import get_adk_model
+    single_runner = Runner(
+        agent=agent,
+        session_service=session_service,
+        app_name="beacon_brd",
+    )
 
-    model = get_adk_model()
-    agents = create_agents(model)
+    # Ensure session exists with proper state
+    sess = await session_service.get_session(user_id=session_id, session_id=snapshot_id)
+    if sess is None:
+        sess = await session_service.create_session(
+            user_id=session_id, session_id=snapshot_id, state=initial_state,
+        )
+    else:
+        # Update state but preserve signals
+        for key, val in initial_state.items():
+            sess.state[key] = val
 
-    # Map conflict section names to agent keys
+    # Build the user message
+    if additional_context:
+        new_message = (
+            f"Refine your section. Address these issues:\n{additional_context}\n\n"
+            f"Store your improved output in session.state['{agent_key}_output']."
+        )
+    else:
+        new_message = (
+            "Generate your BRD section using the signals stored in session.state['signals_json']. "
+            "Follow your agent's instructions for reading inputs and storing outputs in session state."
+        )
+
+    async for event in single_runner.run_async(
+        user_id=session_id,
+        session_id=snapshot_id,
+        new_message=new_message,
+    ):
+        progress_event = _map_adk_event(event)
+        if progress_event:
+            progress_event["session_id"] = session_id
+            progress_event["round"] = round_num
+            progress_event["agent"] = agent_key
+            emit(progress_event)
+
+
+async def _run_refinement_agents(
+    session_service: InMemorySessionService,
+    agents: dict,
+    session_id: str,
+    snapshot_id: str,
+    conflict_sections: set,
+    conflict_context: str,
+    emit: Callable,
+    round_num: int,
+):
+    """Run only the conflicting agents with conflict context in parallel."""
+    # Map DB section names to agent keys
     section_to_agent = {
         "functional_requirements": "frd",
         "nfrd": "nfrd",
@@ -281,62 +375,34 @@ async def _run_refinement_round(
         "success_metrics": "success_metrics",
     }
 
-    # Run conflicting agents in parallel
-    # (ADK agents need their own async context)
-    loop = asyncio.new_event_loop()
+    tasks = []
+    for section_name in conflict_sections:
+        agent_key = section_to_agent.get(section_name)
+        if agent_key and agent_key in agents:
+            emit({
+                "type": "agent_started",
+                "agent": agent_key,
+                "session_id": session_id,
+                "round": round_num,
+                "refinement": True,
+            })
+            tasks.append(
+                _run_single_agent(
+                    session_service, agents[agent_key], agent_key,
+                    session_id, snapshot_id, {}, emit, round_num,
+                    additional_context=conflict_context,
+                )
+            )
+        else:
+            print(f"  -> Skipping unknown section: {section_name}")
 
-    async def _run_agent(agent_key: str, agent, context: str):
-        msg = f"Refine your section. Address these issues:\n{context}\n\nStore your improved output in session.state['{agent_key}_output']."
-        # For simplicity, we use the Runner with the single agent
-        from google.adk.runners import Runner
-        single_runner = Runner(agent=agent, session_service=session_service, app_name="beacon_refine")
+    if tasks:
+        # Run all conflicting agents in parallel, collect results
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-        sess = await session_service.get_session(user_id=session_id, session_id=snapshot_id)
-        if sess:
-            for key, val in sess.state.items():
-                if key != "signals_json":  # preserve signals
-                    sess.state[key] = val
 
-        async for event in single_runner.run_async(
-            user_id=session_id,
-            session_id=snapshot_id,
-            new_message=msg,
-        ):
-            progress_event = _map_adk_event(event)
-            if progress_event:
-                progress_event["session_id"] = session_id
-                progress_event["round"] = round_num
-                progress_event["refinement"] = True
-                emit(progress_event)
-
-    async def _run_all():
-        tasks = []
-        for section_name in conflict_sections:
-            agent_key = section_to_agent.get(section_name)
-            if agent_key and agent_key in agents:
-                emit({
-                    "type": "agent_started",
-                    "agent": agent_key,
-                    "session_id": session_id,
-                    "round": round_num,
-                    "refinement": True,
-                })
-                tasks.append(_run_agent(agent_key, agents[agent_key], conflict_context))
-            else:
-                print(f"  -> Skipping unknown section: {section_name}")
-
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-        # After refinement, re-run validation only
-        from brd_module.adk_agents import VALIDATION_INSTRUCTION
-        validation_agent = agents["validation"]
-        await _run_agent("validation", validation_agent, "")
-
-    loop.run_until_complete(_run_all())
-    loop.close()
-
-    # Return updated session
+async def _get_session(session_service, session_id, snapshot_id):
+    """Helper to get session state."""
     try:
         loop = asyncio.new_event_loop()
         session = loop.run_until_complete(
@@ -349,10 +415,7 @@ async def _run_refinement_round(
 
 
 def _build_conflict_context(state: dict, issues: list) -> str:
-    """
-    Build a conflict context string from validation issues.
-    This tells the re-running agents exactly what to fix.
-    """
+    """Build a conflict context string from validation issues."""
     context_parts = ["## Issues found in your section that need fixing:\n"]
 
     for i, issue in enumerate(issues, 1):
@@ -374,23 +437,11 @@ def _build_conflict_context(state: dict, issues: list) -> str:
 
 
 async def _persist_outputs(session_service, session_id: str, snapshot_id: str, signals: list):
-    """
-    After ADK workflow completes, read all agent outputs from session state
-    and persist to brd_sections and brd_validation_flags.
-    """
+    """After ADK workflow completes, read all agent outputs from session state and persist to DB."""
     print(f"[ADK:{session_id}] Persisting outputs to DB...")
 
-    try:
-        loop = asyncio.new_event_loop()
-        session = loop.run_until_complete(
-            session_service.get_session(user_id=session_id, session_id=snapshot_id)
-        )
-        loop.close()
-    except Exception as e:
-        print(f"[ADK:{session_id}] Could not retrieve session: {e}")
-        return
-
-    if not session:
+    session = await _get_session(session_service, session_id, snapshot_id)
+    if session is None:
         print(f"[ADK:{session_id}] Session not found.")
         return
 

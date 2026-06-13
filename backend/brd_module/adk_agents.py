@@ -75,7 +75,10 @@ Instructions:
 If no requirement signals are found, output: "Insufficient data to generate this section. No requirement signals were found in the provided sources."
 
 {_build_state_write_prompt('frd_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 NFRD_INSTRUCTION = f"""\
 You are a senior business analyst generating the Non-Functional Requirements (NFRD) section of a BRD.
@@ -106,7 +109,10 @@ Instructions:
 If no relevant signals are found, output: "Insufficient data to generate this section. No non-functional requirement signals were found in the provided sources."
 
 {_build_state_write_prompt('nfrd_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 STAKEHOLDER_INSTRUCTION = f"""\
 You are a senior business analyst generating the Stakeholder Analysis section of a BRD.
@@ -126,7 +132,10 @@ Instructions:
 If no identifiable stakeholders are found, output: "Insufficient data to generate this section. No identifiable stakeholders were found in the source communications."
 
 {_build_state_write_prompt('stakeholder_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 TIMELINE_INSTRUCTION = f"""\
 You are a senior business analyst generating the Project Timeline section of a BRD.
@@ -150,7 +159,10 @@ Instructions:
 If no timeline signals are found, output: "No project timeline information was found in the provided sources. Timeline must be established through stakeholder clarification."
 
 {_build_state_write_prompt('timeline_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 BUSINESS_RULES_INSTRUCTION = f"""\
 You are a senior business analyst generating the Business Rules section of a BRD.
@@ -174,7 +186,10 @@ Instructions:
 If no decision signals are found, output: "Insufficient data to generate this section. No confirmed decisions or business rules were found in the provided sources."
 
 {_build_state_write_prompt('business_rules_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 ASSUMPTIONS_RISKS_INSTRUCTION = f"""\
 You are a senior business analyst generating the Assumptions & Risks section of a BRD.
@@ -201,7 +216,10 @@ Instructions:
 If no signals are found, output: "Insufficient data to generate this section. No signals were found to infer assumptions and risks from."
 
 {_build_state_write_prompt('assumptions_risks_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 SUCCESS_METRICS_INSTRUCTION = f"""\
 You are a senior business analyst generating the Success Metrics section of a BRD.
@@ -226,7 +244,10 @@ Instructions:
 If no relevant signals are found, output: "Insufficient data to generate this section. No requirements or decisions were found to derive metrics from."
 
 {_build_state_write_prompt('success_metrics_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 EXECUTIVE_SUMMARY_INSTRUCTION = f"""\
 You are a senior business analyst writing the Executive Summary for a BRD.
@@ -243,7 +264,10 @@ Instructions:
 3. STRICTURE: Output ONLY clean Markdown content. NEVER output HTML tags.
 
 {_build_state_write_prompt('executive_summary_output')}
-Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks."""
+Output ONLY the final markdown content for this section. Do not wrap in markdown code blocks.
+
+If you cannot complete your task due to technical limitations (e.g., context length, rate limits),
+output a clear error message explaining what went wrong. Do not crash or output empty content."""
 
 VALIDATION_INSTRUCTION = f"""\
 You are a BRD quality validator. Review all BRD sections for conflicts, gaps, and inconsistencies.
