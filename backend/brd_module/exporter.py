@@ -27,6 +27,13 @@ except (ImportError, OSError):
     WEASYPRINT_AVAILABLE = False
 
 try:
+    from xhtml2pdf import pisa
+    XHTML2PDF_AVAILABLE = True
+except ImportError:
+    XHTML2PDF_AVAILABLE = False
+
+
+try:
     from docx import Document
     from docx.shared import Pt, RGBColor, Inches
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -103,13 +110,13 @@ def fetch_mermaid_svg(mermaid_text):
         return f"<p><i>Error loading SVG chart: {e}</i></p>"
 
 def replace_mermaid_with_svg(markdown_content):
-    pattern = r'```mermaid\\n(.*?)```'
+    pattern = r'```mermaid\n(.*?)```'
     def replace(match):
         mermaid_code = match.group(1)
         if "%%{init:" not in mermaid_code:
-            mermaid_code = '%%{init: { "theme": "base", "themeVariables": { "fontSize": "22px", "fontFamily": "Inter, sans-serif" } } }%%\\n' + mermaid_code
+            mermaid_code = '%%{init: { "theme": "base", "themeVariables": { "fontSize": "22px", "fontFamily": "Inter, sans-serif" } } }%%\n' + mermaid_code
         svg = fetch_mermaid_svg(mermaid_code)
-        return f"\\n{svg}\\n"
+        return f"\n{svg}\n"
     return re.sub(pattern, replace, markdown_content, flags=re.DOTALL)
 
 def export_brd(session_id: str, title: str = "Business Requirements Document", theme: str = "Corporate Professional") -> str:
@@ -189,8 +196,8 @@ def export_brd_to_pdf(session_id: str, output_file: str = None, title: str = "Bu
     """
     Fetches the latest BRD sections and exports as PDF with enhanced formatting.
     """
-    if not WEASYPRINT_AVAILABLE and not PYPANDOC_AVAILABLE:
-        raise ImportError("Neither weasyprint nor pypandoc are available for PDF export.")
+    if not WEASYPRINT_AVAILABLE and not PYPANDOC_AVAILABLE and not XHTML2PDF_AVAILABLE:
+        raise ImportError("Neither weasyprint, pypandoc, nor xhtml2pdf are available for PDF export.")
     
     # Get markdown content
     markdown_content = export_brd(session_id, title, theme=theme)
@@ -213,14 +220,23 @@ def export_brd_to_pdf(session_id: str, output_file: str = None, title: str = "Bu
             with open(output_file, 'wb') as f:
                 f.write(pdf_bytes)
         return pdf_bytes
-    elif PYPANDOC_AVAILABLE:
-        # Fallback to pypandoc HTML generation since pdf generation requires external latex engines which might fail
-        with tempfile.NamedTemporaryFile(suffix='.css', delete=False, mode='w', encoding='utf-8') as f_css:
-            f_css.write(css_content)
-            css_path = f_css.name
-            
-        try:
-            if output_file is None:
+    elif PYPANDOC_AVAILABLE or XHTML2PDF_AVAILABLE:
+        # Generate HTML from markdown to use with xhtml2pdf if needed
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=['tables', 'fenced_code', 'toc', 'extra', 'codehilite']
+        )
+        html_content = _add_color_highlights(html_content)
+        styled_html = f"<!DOCTYPE html><html><head><meta charset='UTF-8'><style>{css_content}</style></head><body>{html_content}</body></html>"
+
+        pdf_bytes = None
+
+        if PYPANDOC_AVAILABLE:
+            with tempfile.NamedTemporaryFile(suffix='.css', delete=False, mode='w', encoding='utf-8') as f_css:
+                f_css.write(css_content)
+                css_path = f_css.name
+                
+            try:
                 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f_pdf:
                     tmp_pdf_path = f_pdf.name
                 
@@ -229,23 +245,35 @@ def export_brd_to_pdf(session_id: str, output_file: str = None, title: str = "Bu
                     with open(tmp_pdf_path, 'rb') as f:
                         pdf_bytes = f.read()
                 except Exception:
-                    # Fallback to HTML if PDF engine is missing
-                    pypandoc.convert_text(markdown_content, 'html', format='markdown', outputfile=tmp_pdf_path, extra_args=[f"--css={css_path}", "-s", "--metadata", "pagetitle=BeaconBRD"])
-                    with open(tmp_pdf_path, 'rb') as f:
-                        pdf_bytes = f.read()
-                        
-                os.remove(tmp_pdf_path)
-                return pdf_bytes
+                    # Fallback to xhtml2pdf if PDF engine is missing
+                    if XHTML2PDF_AVAILABLE:
+                        pdf_buffer = BytesIO()
+                        pisa_status = pisa.CreatePDF(styled_html, dest=pdf_buffer)
+                        if not pisa_status.err:
+                            pdf_bytes = pdf_buffer.getvalue()
+                        else:
+                            raise Exception("Both pypandoc and xhtml2pdf failed to generate PDF")
+                    else:
+                        raise Exception("PDF generation failed: external engine missing and xhtml2pdf not available.")
+                finally:
+                    if os.path.exists(tmp_pdf_path):
+                        os.remove(tmp_pdf_path)
+            finally:
+                if os.path.exists(css_path):
+                    os.remove(css_path)
+        elif XHTML2PDF_AVAILABLE:
+            pdf_buffer = BytesIO()
+            pisa_status = pisa.CreatePDF(styled_html, dest=pdf_buffer)
+            if not pisa_status.err:
+                pdf_bytes = pdf_buffer.getvalue()
             else:
-                try:
-                    pypandoc.convert_text(markdown_content, 'pdf', format='markdown', outputfile=output_file, extra_args=[f"--css={css_path}"])
-                except Exception:
-                    pypandoc.convert_text(markdown_content, 'html', format='markdown', outputfile=output_file, extra_args=[f"--css={css_path}", "-s", "--metadata", "pagetitle=BeaconBRD"])
+                raise Exception("xhtml2pdf failed to generate PDF")
                 
-                with open(output_file, 'rb') as f:
-                    return f.read()
-        finally:
-            os.remove(css_path)
+        if output_file and pdf_bytes:
+            with open(output_file, 'wb') as f:
+                f.write(pdf_bytes)
+                
+        return pdf_bytes
 
 
 def _add_color_highlights(html_content: str) -> str:

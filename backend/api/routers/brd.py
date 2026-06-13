@@ -221,35 +221,6 @@ def regenerate_brd_section(session_id: str, section_name: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/sections/{section_name}/generate")
-def regenerate_brd_section(session_id: str, section_name: str):
-    """
-    Regenerate a single BRD section.
-    """
-    try:
-        # Get latest snapshot or create a new one
-        conn, db_type = get_connection()
-        cur = conn.cursor()
-        query = "SELECT snapshot_id FROM brd_sections WHERE session_id = %s ORDER BY version_number DESC LIMIT 1"
-        if db_type == "sqlite":
-            query = query.replace("%s", "?")
-        cur.execute(query, (session_id,))
-        row = cur.fetchone()
-        snapshot_id = row[0] if row else None
-        conn.close()
-
-        if not snapshot_id:
-            snapshot_id = create_snapshot(session_id)
-
-        # run single agent
-        content = run_single_agent(session_id, snapshot_id, section_name, client=None)
-
-        validate_brd(session_id)
-
-        return {"message": f"Section {section_name} regenerated successfully.", "content": content}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/generate/stream")
 def stream_brd_generation(session_id: str):
