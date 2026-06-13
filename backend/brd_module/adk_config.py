@@ -9,9 +9,10 @@ from google.adk.runners import Runner
 
 
 def get_adk_model() -> LiteLlm:
-    """Create the shared ADK model instance backed by Groq via LiteLLM."""
-    model_name = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-    return LiteLlm(model=f"groq/{model_name}")
+    """Create the shared ADK model instance backed by OpenRouter."""
+    model_name = os.environ.get("OPENROUTER_MODEL", "openrouter/owl-alpha")
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    return LiteLlm(model=model_name, api_key=api_key)
 
 
 def get_session_service() -> InMemorySessionService:
