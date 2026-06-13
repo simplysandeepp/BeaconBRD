@@ -16,8 +16,10 @@ USER root
 # Removed libharfbuzz-subset0 as it's not in Bullseye mirrors
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    pkg-config \
+    cmake \
     libpq-dev \
-    # WeasyPrint and PDF dependencies for Bullseye
+    # WeasyPrint and PDF dependencies
     libcairo2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
@@ -25,7 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf2.0-0 \
     libffi-dev \
     shared-mime-info \
-    # Standard harfbuzz for font support in Bullseye
     libharfbuzz0b \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
