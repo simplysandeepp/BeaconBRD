@@ -36,15 +36,16 @@ def export_brd(session_id: str, title: str = "Business Requirements Document") -
     """
     sections = get_latest_brd_sections(session_id)
     
-    # Order of presentation
+    # Order of presentation — matches 3-phase pipeline output (7 sections)
     section_order = [
         ("executive_summary", "1. Executive Summary"),
         ("functional_requirements", "2. Functional Requirements"),
-        ("stakeholder_analysis", "3. Stakeholder Analysis"),
-        ("timeline", "4. Project Timeline"),
-        ("decisions", "5. Key Decisions"),
-        ("assumptions", "6. Assertions & Assumptions"),
-        ("success_metrics", "7. Success Metrics")
+        ("nfrd", "3. Non-Functional Requirements"),
+        ("stakeholder_analysis", "4. Stakeholder Analysis"),
+        ("timeline", "5. Project Timeline"),
+        ("decisions", "6. Business Rules"),
+        ("assumptions_risks", "7. Assumptions & Risks"),
+        ("success_metrics", "8. Success Metrics"),
     ]
     
     doc = []
@@ -569,16 +570,21 @@ def _fill_docx_template(template_path: str, session_id: str, title: str, section
     doc = Document(template_path)
 
     # Prepare replacement dictionary (strip markdown for template-based export)
+    # Supports both old and new section DB keys for backward compatibility with existing templates
     replacements = {
         '{TITLE}': title,
         '{SESSION_ID}': session_id,
         '{GENERATED_DATE}': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
         '{EXECUTIVE_SUMMARY}': _strip_markdown(sections.get('executive_summary', '(Not generated)')),
         '{FUNCTIONAL_REQUIREMENTS}': _strip_markdown(sections.get('functional_requirements', '(Not generated)')),
+        '{NFRD}': _strip_markdown(sections.get('nfrd', '(Not generated)')),
+        '{NON_FUNCTIONAL_REQUIREMENTS}': _strip_markdown(sections.get('nfrd', '(Not generated)')),
         '{STAKEHOLDER_ANALYSIS}': _strip_markdown(sections.get('stakeholder_analysis', '(Not generated)')),
         '{TIMELINE}': _strip_markdown(sections.get('timeline', '(Not generated)')),
         '{DECISIONS}': _strip_markdown(sections.get('decisions', '(Not generated)')),
-        '{ASSUMPTIONS}': _strip_markdown(sections.get('assumptions', '(Not generated)')),
+        '{BUSINESS_RULES}': _strip_markdown(sections.get('decisions', '(Not generated)')),
+        '{ASSUMPTIONS_RISKS}': _strip_markdown(sections.get('assumptions_risks', '(Not generated)')),
+        '{ASSUMPTIONS}': _strip_markdown(sections.get('assumptions_risks', sections.get('assumptions', '(Not generated)'))),
         '{SUCCESS_METRICS}': _strip_markdown(sections.get('success_metrics', '(Not generated)')),
     }
 
@@ -768,15 +774,16 @@ def _create_docx_from_scratch(session_id: str, title: str, sections: dict) -> Do
             flag_para.add_run(desc)
         doc.add_paragraph()  # Spacing
 
-    # ── Sections ──
+    # ── Sections ── (matches 3-phase pipeline output — 7 sections)
     section_order = [
         ("executive_summary", "1. Executive Summary"),
         ("functional_requirements", "2. Functional Requirements"),
-        ("stakeholder_analysis", "3. Stakeholder Analysis"),
-        ("timeline", "4. Project Timeline"),
-        ("decisions", "5. Key Decisions"),
-        ("assumptions", "6. Assertions & Assumptions"),
-        ("success_metrics", "7. Success Metrics")
+        ("nfrd", "3. Non-Functional Requirements"),
+        ("stakeholder_analysis", "4. Stakeholder Analysis"),
+        ("timeline", "5. Project Timeline"),
+        ("decisions", "6. Business Rules"),
+        ("assumptions_risks", "7. Assumptions & Risks"),
+        ("success_metrics", "8. Success Metrics"),
     ]
 
     for db_key, display_title in section_order:
