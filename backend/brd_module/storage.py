@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import List
+from typing import List, Dict
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
