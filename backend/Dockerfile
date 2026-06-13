@@ -1,5 +1,5 @@
 # Use Python 3.11 Bookworm for stability and up-to-date dependencies
-FROM python:3.11-slim-bookworm
+FROM python:3.11-bookworm
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -13,9 +13,9 @@ WORKDIR /app
 USER root
 
 # Install system dependencies
-# Removed libharfbuzz-subset0 as it's not in Bullseye mirrors
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    pkg-config \
     libpq-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
