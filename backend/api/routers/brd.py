@@ -16,8 +16,14 @@ sys.path.append(PROJECT_ROOT)
 from brd_module.brd_pipeline import run_brd_generation
 from brd_module.validator import validate_brd
 from brd_module.exporter import export_brd, export_brd_to_docx, export_brd_to_pdf, WEASYPRINT_AVAILABLE
-from brd_module.storage import get_latest_brd_sections, store_brd_section, get_connection, clear_validation_flags
+from brd_module.storage import get_latest_brd_sections, store_brd_section, get_connection, clear_validation_flags, create_snapshot
 from brd_module.hitl.orchestrator import submit_ad_hoc_prompt
+from brd_module.brd_pipeline import run_single_agent
+
+# ADK orchestrator — Feature flag controlled
+USE_ADK = os.environ.get("USE_ADK_ORCHESTRATOR", "false").lower() == "true"
+if USE_ADK:
+    from brd_module.adk_orchestrator import run_brd_generation_adk
 
 router = APIRouter(
     prefix="/sessions/{session_id}/brd",
@@ -169,16 +175,51 @@ table tr:nth-child(even) {
 def generate_brd(session_id: str):
     """
     Trigger the multi-agent BRD generation pipeline synchronously.
-    Runs all 7 agents (in parallel internally) and only returns 200 when
-    all brd_sections rows are written. This avoids polling from the frontend.
+    Uses ADK orchestrator when USE_ADK_ORCHESTRATOR=true, otherwise falls
+    back to the legacy ThreadPoolExecutor pipeline.
     """
     try:
-        # run_brd_generation is synchronous — it uses ThreadPoolExecutor internally
-        # and only returns once all sections are stored.
-        snapshot_id = run_brd_generation(session_id)
-        # Validate immediately after generation completes
-        validate_brd(session_id)
+        if USE_ADK:
+            # ADK path — async-to-sync bridge
+            import asyncio
+            snapshot_id = asyncio.run(
+                run_brd_generation_adk(session_id, on_progress=None)
+            )
+        else:
+            # Legacy path
+            snapshot_id = run_brd_generation(session_id)
+            validate_brd(session_id)
         return {"message": "BRD generation and validation completed.", "snapshot_id": snapshot_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sections/{section_name}/generate")
+def regenerate_brd_section(session_id: str, section_name: str):
+    """
+    Regenerate a single BRD section.
+    """
+    try:
+        # Get latest snapshot or create a new one
+        conn, db_type = get_connection()
+        cur = conn.cursor()
+        query = "SELECT snapshot_id FROM brd_sections WHERE session_id = %s ORDER BY version_number DESC LIMIT 1"
+        if db_type == "sqlite":
+            query = query.replace("%s", "?")
+        cur.execute(query, (session_id,))
+        row = cur.fetchone()
+        snapshot_id = row[0] if row else None
+        conn.close()
+
+        if not snapshot_id:
+            snapshot_id = create_snapshot(session_id)
+
+        # run single agent
+        content = run_single_agent(session_id, snapshot_id, section_name, client=None)
+
+        validate_brd(session_id)
+
+        return {"message": f"Section {section_name} regenerated successfully.", "content": content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -187,7 +228,16 @@ def generate_brd(session_id: str):
 def stream_brd_generation(session_id: str):
     """
     Trigger BRD generation and stream real-time status updates using SSE.
+    Uses ADK orchestrator when USE_ADK_ORCHESTRATOR=true, otherwise legacy pipeline.
     """
+    if USE_ADK:
+        return _stream_brd_generation_adk(session_id)
+    else:
+        return _stream_brd_generation_legacy(session_id)
+
+
+def _stream_brd_generation_legacy(session_id: str):
+    """Legacy streaming via ThreadPoolExecutor pipeline."""
     event_queue: "queue.Queue[dict | None]" = queue.Queue()
 
     def push_event(payload: dict) -> None:
@@ -220,10 +270,62 @@ def stream_brd_generation(session_id: str):
 
     async def event_stream():
         loop = asyncio.get_event_loop()
-        # Browser will retry if disconnected.
         yield "retry: 3000\n\n"
         while True:
             item = await loop.run_in_executor(None, event_queue.get)
+            if item is None:
+                break
+            event_type = item.get("type", "message")
+            yield f"event: {event_type}\n"
+            yield f"data: {json.dumps(item)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _stream_brd_generation_adk(session_id: str):
+    """ADK streaming via Google ADK Runner.run_async()."""
+
+    async def event_stream():
+        yield "retry: 3000\n\n"
+        yield f"event: generation_started\ndata: {json.dumps({'type': 'generation_started', 'session_id': session_id, 'engine': 'adk'})}\n\n"
+
+        def on_progress(event: dict):
+            event_type = event.get("type", "message")
+            # Buffer events — ADK runs async, we collect via callback
+            event["session_id"] = session_id
+            # We can't yield from callback, so we use a queue
+            _adk_event_buffer.put(event)
+
+        _adk_event_buffer: "queue.Queue[dict | None]" = queue.Queue()
+
+        def sync_on_progress(event: dict):
+            _adk_event_buffer.put(event)
+
+        # Run ADK in a background thread
+        import threading
+
+        def _worker():
+            try:
+                import asyncio
+                asyncio.run(run_brd_generation_adk(session_id, on_progress=sync_on_progress))
+            except Exception as e:
+                _adk_event_buffer.put({"type": "error", "session_id": session_id, "message": str(e)})
+            finally:
+                _adk_event_buffer.put(None)
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+
+        while True:
+            item = await asyncio.get_event_loop().run_in_executor(None, _adk_event_buffer.get)
             if item is None:
                 break
             event_type = item.get("type", "message")
