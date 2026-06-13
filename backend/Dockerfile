@@ -21,8 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
+# Cache-bust: pin a version number here to force re-install when dependencies change
+ARG CACHE_BUST=2
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN echo "Cache bust: $CACHE_BUST" && pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 # This copies everything from your /backend folder into /app in the container
