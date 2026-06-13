@@ -1039,6 +1039,57 @@ export default function IngestionPage() {
                 </motion.div>
             </div>
 
+            {/* Coming Soon Integrations */}
+            <motion.div
+                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.17 }}
+            >
+                <div className="flex items-center gap-3 mb-3">
+                    <h2 className="text-sm font-semibold text-zinc-300">More Integrations</h2>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 border border-white/10 text-zinc-500 font-medium tracking-wide uppercase">Coming Soon</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                    {[
+                        { name: 'Confluence',   abbr: 'CF', bg: '#1868DB22', text: '#5b8dee', border: '#1868DB33' },
+                        { name: 'Notion',       abbr: 'N',  bg: '#ffffff14', text: '#e4e4e4', border: '#ffffff18' },
+                        { name: 'GitBook',      abbr: 'GB', bg: '#3b4cca22', text: '#818cf8', border: '#3b4cca33' },
+                        { name: 'Mintlify',     abbr: 'M',  bg: '#7c3aed22', text: '#a78bfa', border: '#7c3aed33' },
+                        { name: 'Docusaurus',   abbr: 'DS', bg: '#0891b222', text: '#22d3ee', border: '#0891b233' },
+                        { name: 'Slite',        abbr: 'SL', bg: '#0f766e22', text: '#2dd4bf', border: '#0f766e33' },
+                        { name: 'Outline',      abbr: 'OL', bg: '#ea580c22', text: '#fb923c', border: '#ea580c33' },
+                        { name: 'Wiki.js',      abbr: 'WJ', bg: '#16a34a22', text: '#4ade80', border: '#16a34a33' },
+                        { name: 'BookStack',    abbr: 'BS', bg: '#b45309 22', text: '#fbbf24', border: '#b4530933' },
+                        { name: 'Document360', abbr: 'D3', bg: '#dc262622', text: '#f87171', border: '#dc262633' },
+                        { name: 'ClickUp',      abbr: 'CU', bg: '#7e22ce22', text: '#c084fc', border: '#7e22ce33' },
+                        { name: 'SharePoint',   abbr: 'SP', bg: '#0369a122', text: '#38bdf8', border: '#0369a133' },
+                        { name: 'XWiki',        abbr: 'XW', bg: '#15803d22', text: '#86efac', border: '#15803d33' },
+                        { name: 'MediaWiki',    abbr: 'MW', bg: '#0284c722', text: '#7dd3fc', border: '#0284c733' },
+                        { name: 'ReadMe',       abbr: 'RM', bg: '#be185d22', text: '#f472b6', border: '#be185d33' },
+                        { name: 'Archbee',      abbr: 'AB', bg: '#e1193422', text: '#fca5a5', border: '#e1193433' },
+                        { name: 'Nuclino',      abbr: 'NU', bg: '#a21caf22', text: '#e879f9', border: '#a21caf33' },
+                        { name: 'Helpjuice',    abbr: 'HJ', bg: '#ca8a0422', text: '#fde047', border: '#ca8a0433' },
+                        { name: 'Stonly',       abbr: 'ST', bg: '#4d7c0f22', text: '#bef264', border: '#4d7c0f33' },
+                        { name: 'Coda',         abbr: 'CO', bg: '#4338ca22', text: '#a5b4fc', border: '#4338ca33' },
+                    ].map((tool) => (
+                        <div
+                            key={tool.name}
+                            className="glass-card p-3 rounded-xl flex items-center gap-2.5 select-none"
+                            style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                        >
+                            <div
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                                style={{ background: tool.bg, color: tool.text, border: `1px solid ${tool.border}` }}
+                            >
+                                {tool.abbr}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-xs text-zinc-400 truncate leading-tight">{tool.name}</p>
+                                <p className="text-[10px] text-zinc-600 leading-tight">Coming soon</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </motion.div>
+
             {/* S2-02: Active Sources Table — unified files + slack + gmail */}
             <motion.div
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.2 }}
