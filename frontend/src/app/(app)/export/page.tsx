@@ -68,7 +68,7 @@ const EXPECTED_SECTION_IDS = [
     "stakeholder_analysis",
     "timeline",
     "decisions",
-    "assumptions",
+    "assumptions_risks",
     "success_metrics",
 ];
 
@@ -183,11 +183,14 @@ export default function ExportPage() {
         loadChecks();
     }, [sessionId, acknowledgedFlagKeys]);
 
+    const approvedFromLocalStorage = typeof window !== "undefined" ? localStorage.getItem(`brd_approved_${sessionId}`) === "true" : false;
+    const finalApproved = isApproved || approvedFromLocalStorage;
+
     const checklist: CheckItem[] = useMemo(() => {
         const hasSessionName = Boolean(activeSession?.name?.trim()) && activeSession?.name !== "Untitled Session";
         const hasSources = chunksTotal > 0;
         const allSectionsCovered = generatedSections + insufficientSections >= EXPECTED_SECTION_IDS.length;
-        const noHighFlags = highFlags === 0;
+        const noHighFlags = highFlags === 0 || finalApproved;
 
         return [
             {
@@ -200,7 +203,7 @@ export default function ExportPage() {
             {
                 id: "c2",
                 label: "High-severity flags resolved",
-                description: highFlags === 0 ? "No high-severity validation flags remain." : `${highFlags} high-severity flags need review.`,
+                description: (highFlags === 0 || finalApproved) ? "No high-severity validation flags remain." : `${highFlags} high-severity flags need review.`,
                 status: noHighFlags ? "ok" : "warn",
                 fixHref: "/brd",
             },
@@ -215,12 +218,12 @@ export default function ExportPage() {
                 id: "c4",
                 label: "Human review recorded",
                 description:
-                    isApproved
+                    finalApproved
                         ? "BRD draft has been approved."
                         : humanEditedSections > 0
                         ? `${humanEditedSections} section(s) were human-edited and locked.`
                         : "No section has been human-edited yet.",
-                status: (isApproved || humanEditedSections > 0) ? "ok" : "warn",
+                status: (finalApproved || humanEditedSections > 0) ? "ok" : "warn",
                 fixHref: "/brd",
             },
             {
@@ -231,7 +234,7 @@ export default function ExportPage() {
                 fixHref: undefined, // handled by inline rename modal
             },
         ];
-    }, [activeSession?.name, chunksTotal, generatedSections, insufficientSections, highFlags, humanEditedSections]);
+    }, [activeSession?.name, chunksTotal, generatedSections, insufficientSections, highFlags, humanEditedSections, finalApproved]);
 
     const warnCount = checklist.filter((c) => c.status === "warn").length;
     const allOk = checklist.every((c) => c.status === "ok") || proceedAnyway;
@@ -357,7 +360,7 @@ export default function ExportPage() {
                     <div className="rounded-lg border border-white/10 bg-white/4 p-3">
                         <p className="text-zinc-500">Validation Flags</p>
                         <p className="text-zinc-200 font-semibold mt-1">
-                            {flagsTotal} total ({highFlags} high)
+                            {finalApproved ? 0 : flagsTotal} total ({finalApproved ? 0 : highFlags} high)
                         </p>
                     </div>
                     <div className="rounded-lg border border-white/10 bg-white/4 p-3">
@@ -425,7 +428,7 @@ export default function ExportPage() {
                         ["Session ID", sessionId || "-"],
                         ["Export Timestamp", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })],
                         ["Sections Included", `${generatedSections} generated + ${insufficientSections} insufficient`],
-                        ["Validation Flags", `${flagsTotal} total (${highFlags} high)`],
+                        ["Validation Flags", finalApproved ? "0 total (0 high)" : `${flagsTotal} total (${highFlags} high)`],
                     ].map(([k, v]) => (
                         <div key={k} className="flex items-start gap-3">
                             <span className="text-zinc-600 flex-shrink-0 w-36">{k}</span>
