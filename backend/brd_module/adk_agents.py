@@ -9,8 +9,12 @@ Each agent's `instruction` field contains the full prompt that tells the LLM:
 4. Where to store output in session.state
 """
 import re
-from google.adk.agents import LlmAgent
-from google.adk.models.lite_llm import LiteLlm
+
+def _import_adk_agents():
+    """Lazy import ADK agent classes."""
+    from google.adk.agents import LlmAgent
+    from google.adk.models.lite_llm import LiteLlm
+    return LlmAgent, LiteLlm
 
 
 def _build_signal_context_prompt(label_filter: str = None, max_signals: int = 30) -> str:
@@ -304,11 +308,12 @@ Output ONLY valid JSON. Do not include any other text.
 
 # ─── Agent Factory ──────────────────────────────────────────────────────────
 
-def create_agents(model: LiteLlm) -> dict:
+def create_agents(model) -> dict:
     """
     Create all 9 ADK LlmAgent instances with the given model.
     Returns a dict of agent_name -> LlmAgent.
     """
+    LlmAgent, _ = _import_adk_agents()
     agents = {
         "frd": LlmAgent(
             name="frd",

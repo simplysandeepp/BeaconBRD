@@ -94,7 +94,7 @@ def call_llm_with_retry(client: OpenAI, messages: List[Dict[str, str]], json_mod
 
 # ─── Phase 1 Agents ─────────────────────────────────────────────────────────
 
-def frd_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def frd_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Functional Requirements Document agent — generates the core functional requirements."""
     if is_section_locked(session_id, 'functional_requirements') and not additional_context:
         return get_section_content(session_id, 'functional_requirements')
@@ -154,7 +154,7 @@ Output ONLY the final markdown content for this section. Do not wrap in markdown
     return content
 
 
-def nfrd_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def nfrd_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Non-Functional Requirements Document agent — generates NFRD sections."""
     if is_section_locked(session_id, 'nfrd') and not additional_context:
         return get_section_content(session_id, 'nfrd')
@@ -234,7 +234,7 @@ Output ONLY the final markdown content for this section. Do not wrap in markdown
     return content
 
 
-def stakeholder_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def stakeholder_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Stakeholder Analysis agent — identifies and analyzes project stakeholders."""
     if is_section_locked(session_id, 'stakeholder_analysis') and not additional_context:
         return get_section_content(session_id, 'stakeholder_analysis')
@@ -311,7 +311,7 @@ Output ONLY the final markdown content for this section. Do not wrap in markdown
 
 # ─── Phase 2 Agents ─────────────────────────────────────────────────────────
 
-def timeline_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def timeline_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Timeline agent — generates project timeline, milestones, and deadlines."""
     if is_section_locked(session_id, 'timeline') and not additional_context:
         return get_section_content(session_id, 'timeline')
@@ -372,7 +372,7 @@ Output ONLY the final markdown content for this section.
     return content
 
 
-def business_rules_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def business_rules_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Business Rules agent — generates business rules, constraints, and policies."""
     if is_section_locked(session_id, 'decisions') and not additional_context:
         return get_section_content(session_id, 'decisions')
@@ -432,7 +432,7 @@ Output ONLY the final markdown content for this section.
     return content
 
 
-def assumptions_risks_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def assumptions_risks_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Assumptions & Risks agent — generates project assumptions and risk register."""
     if is_section_locked(session_id, 'assumptions_risks') and not additional_context:
         return get_section_content(session_id, 'assumptions_risks')
@@ -493,7 +493,7 @@ Output ONLY the final markdown content for this section.
     return content
 
 
-def success_metrics_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def success_metrics_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Success Metrics agent — derives measurable success criteria."""
     if is_section_locked(session_id, 'success_metrics') and not additional_context:
         return get_section_content(session_id, 'success_metrics')
@@ -556,7 +556,7 @@ Output ONLY the final markdown content for this section.
 
 # ─── Phase 3 Agents ─────────────────────────────────────────────────────────
 
-def executive_summary_agent(session_id: str, snapshot_id: str, client: Groq = None, additional_context: str = "") -> str:
+def executive_summary_agent(session_id: str, snapshot_id: str, client: Optional[OpenAI] = None, additional_context: str = "") -> str:
     """Runs LAST after all other agents. Reads all Phase 1 + Phase 2 outputs."""
     if is_section_locked(session_id, 'executive_summary') and not additional_context:
         return get_section_content(session_id, 'executive_summary')
@@ -630,7 +630,7 @@ def _build_phase2_context(agent_name: str, phase1_results: dict) -> str:
     return "Context from Phase 1 agents (use these to ensure consistency and avoid conflicts):" + "".join(sections)
 
 
-def _run_parallel(agents_dict: dict, session_id: str, snapshot_id: str, client: Groq,
+def _run_parallel(agents_dict: dict, session_id: str, snapshot_id: str, client: OpenAI,
                   emit: Callable, phase1_context: dict = None) -> dict:
     """Run agents in parallel, return dict of section_name -> content."""
     results = {}
@@ -663,7 +663,7 @@ def _run_parallel(agents_dict: dict, session_id: str, snapshot_id: str, client: 
 
 def run_brd_generation(
     session_id: str,
-    client: Groq = None,
+    client: Optional[OpenAI] = None,
     on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> str:
     """
@@ -740,7 +740,7 @@ def run_single_agent(
     session_id: str,
     snapshot_id: str,
     section_name: str,
-    client: Groq,
+    client: OpenAI,
     additional_context: str = ""
 ) -> str:
     """Dispatches to a specific agent for ad-hoc regeneration."""

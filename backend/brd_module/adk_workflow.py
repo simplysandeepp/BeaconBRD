@@ -2,28 +2,21 @@
 adk_workflow.py
 Builds the BRD workflow graph using ADK's ParallelAgent and SequentialAgent.
 
+All ADK imports are lazy so the app doesn't crash if google.adk is not installed.
+
 Structure:
   BRDWorkflow (SequentialAgent)
   ├── AllSectionsParallel (ParallelAgent): ALL 7 section agents run at once
-  │   ├── frd_agent
-  │   ├── nfrd_agent
-  │   ├── stakeholder_agent
-  │   ├── timeline_agent
-  │   ├── business_rules_agent
-  │   ├── assumptions_risks_agent
-  │   └── success_metrics_agent
   └── SynthesisSequential (SequentialAgent): Executive Summary → Validation
-      ├── executive_summary_agent
-      └── validation_agent
-
-The orchestrator (adk_orchestrator.py) handles iterative refinement:
-  Round 0: Full pipeline (above) → validation flags
-  Round 1+: If conflicts found, re-run only conflicting sections with conflict context → re-validate
-  Max refinement rounds: 2
 """
-from google.adk.agents import SequentialAgent, ParallelAgent
 from brd_module.adk_agents import create_agents
 from brd_module.adk_config import get_adk_model, get_session_service, get_runner
+
+
+def _import_adk_workflow():
+    """Lazy import ADK workflow classes."""
+    from google.adk.agents import SequentialAgent, ParallelAgent
+    return SequentialAgent, ParallelAgent
 
 
 def build_workflow() -> tuple:
@@ -33,13 +26,15 @@ def build_workflow() -> tuple:
     Returns:
         tuple: (Runner, InMemorySessionService) — ready to execute the pipeline.
     """
-    # 1. Shared model (Groq via LiteLLM)
+    SequentialAgent, ParallelAgent = _import_adk_workflow()
+
+    # 1. Shared model (OpenRouter via LiteLLM)
     model = get_adk_model()
 
     # 2. Create all 9 agents
     agents = create_agents(model)
 
-    # 3. All 6 section agents run in parallel — no dependencies between them
+    # 3. All 7 section agents run in parallel — no dependencies between them
     all_sections_parallel = ParallelAgent(
         name="all_sections_parallel",
         sub_agents=[

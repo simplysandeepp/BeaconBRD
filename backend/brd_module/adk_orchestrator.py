@@ -36,8 +36,7 @@ from brd_module.validator import store_validation_flag
 from brd_module.adk_workflow import build_workflow
 from brd_module.adk_agents import create_agents
 from brd_module.adk_config import get_adk_model, get_session_service
-from google.adk.sessions import InMemorySessionService
-from google.adk.runners import Runner
+from brd_module.adk_config import get_runner
 
 # Maximum refinement iterations before giving up
 MAX_REFINEMENT_ROUNDS = 2
@@ -221,7 +220,7 @@ async def run_brd_generation_adk(
 
 
 async def _run_all_agents_with_resilience(
-    session_service: InMemorySessionService,
+    session_service,
     agents: dict,
     session_id: str,
     snapshot_id: str,
@@ -267,7 +266,7 @@ async def _run_all_agents_with_resilience(
 
 
 async def _run_sequential_agents(
-    session_service: InMemorySessionService,
+    session_service,
     agents: dict,
     session_id: str,
     snapshot_id: str,
@@ -297,7 +296,7 @@ async def _run_sequential_agents(
 
 
 async def _run_single_agent(
-    session_service: InMemorySessionService,
+    session_service,
     agent,
     agent_key: str,
     session_id: str,
@@ -311,7 +310,7 @@ async def _run_single_agent(
     Run a single ADK agent in its own Runner call.
     This isolates failures — if this agent fails, it doesn't affect others.
     """
-    single_runner = Runner(
+    single_runner = get_runner(
         agent=agent,
         session_service=session_service,
         app_name="beacon_brd",
@@ -354,7 +353,7 @@ async def _run_single_agent(
 
 
 async def _run_refinement_agents(
-    session_service: InMemorySessionService,
+    session_service,
     agents: dict,
     session_id: str,
     snapshot_id: str,

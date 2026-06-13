@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from pathlib import Path
-from groq import Groq
+from openai import OpenAI
 
 _HERE = Path(__file__).parent
 load_dotenv(_HERE / ".env")
@@ -52,7 +52,7 @@ def store_validation_flag(session_id: str, section_name: str, flag_type: str,
 def validation_agent(
     session_id: str,
     snapshot_id: str,
-    client: Groq,
+    client: OpenAI,
     agent_outputs: Dict[str, str],
     on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
 ):
@@ -62,7 +62,7 @@ def validation_agent(
     Args:
         session_id: Session ID
         snapshot_id: Snapshot ID
-        client: Groq client
+        client: OpenAI client
         agent_outputs: dict of section_name -> content from all 6 agents
         on_progress: optional callback for progress events
     """
@@ -130,7 +130,7 @@ def validation_agent(
     emit({"type": "validation_completed", "session_id": session_id})
 
 
-def _run_ai_validation(session_id: str, client: Groq, sections: dict, emit: callable):
+def _run_ai_validation(session_id: str, client: OpenAI, sections: dict, emit: callable):
     """Run a single LLM call to check all sections for consistency."""
     section_text = ""
     for name, content in sections.items():
@@ -185,13 +185,13 @@ Output ONLY valid JSON. Do not include any other text."""
         print(f"[{session_id}] AI validation check failed: {e}")
 
 
-def validate_brd(session_id: str, client: Groq = None):
+def validate_brd(session_id: str, client: OpenAI = None):
     """
     Legacy entry point kept for backward compatibility.
     Now delegates to the new validation_agent with data from the database.
     """
     if client is None:
-        client = Groq(api_key=os.environ.get("GROQ_CLOUD_API", ""))
+        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.environ.get("OPENROUTER_API_KEY", ""))
 
     from brd_module.storage import get_latest_brd_sections, get_current_snapshot_id
 
