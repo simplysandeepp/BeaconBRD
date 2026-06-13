@@ -379,6 +379,13 @@ export async function generateBRD(
     return apiFetch(`/sessions/${sessionId}/brd/generate`, { method: "POST" });
 }
 
+export async function generateBRDSection(
+    sessionId: string,
+    sectionName: string
+): Promise<{ message: string; content: string }> {
+    return apiFetch(`/sessions/${sessionId}/brd/sections/${sectionName}/generate`, { method: "POST" });
+}
+
 export function streamBRDGeneration(
     sessionId: string,
     handlers: {

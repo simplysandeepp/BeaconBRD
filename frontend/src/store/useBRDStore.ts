@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import {
     generateBRD,
+    generateBRDSection,
     getBRD,
     editBRDSection,
     approveBRD,
@@ -34,9 +35,11 @@ interface BRDStore {
     snapshotId: string | null;
     loading: boolean;
     generating: boolean;
+    generatingSection: string | null;
     error: string | null;
     isApproved: boolean;
     generateAll: (sessionId: string) => Promise<void>;
+    generateSection: (sessionId: string, sectionId: string) => Promise<void>;
     loadBRD: (sessionId: string) => Promise<void>;
     updateSection: (sessionId: string, sectionId: string, content: string) => Promise<void>;
     acknowledgeFlag: (key: string) => void;
@@ -74,6 +77,7 @@ export const useBRDStore = create<BRDStore>((set, get) => ({
     snapshotId: null,
     loading: false,
     generating: false,
+    generatingSection: null,
     error: null,
     isApproved: false,
 
@@ -96,6 +100,26 @@ export const useBRDStore = create<BRDStore>((set, get) => ({
             set({ error: e instanceof Error ? e.message : 'Generation failed' });
         } finally {
             set({ generating: false });
+        }
+    },
+
+    /**
+     * Trigger generation for a single BRD section.
+     */
+    generateSection: async (sessionId, sectionId) => {
+        set({ generatingSection: sectionId, error: null });
+        try {
+            if (typeof window !== "undefined") {
+                localStorage.removeItem(`brd_approved_${sessionId}`);
+            }
+            set({ isApproved: false });
+            await generateBRDSection(sessionId, sectionId);
+            // Reload the results
+            await get().loadBRD(sessionId);
+        } catch (e) {
+            set({ error: e instanceof Error ? e.message : 'Generation failed' });
+        } finally {
+            set({ generatingSection: null });
         }
     },
 

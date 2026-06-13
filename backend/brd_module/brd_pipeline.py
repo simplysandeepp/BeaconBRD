@@ -754,6 +754,7 @@ def run_single_agent(
         'decisions': business_rules_agent,
         'business_rules': business_rules_agent,
         'assumptions_risks': assumptions_risks_agent,
+        'assumptions': assumptions_risks_agent,
         'success_metrics': success_metrics_agent,
         'executive_summary': executive_summary_agent,
     }

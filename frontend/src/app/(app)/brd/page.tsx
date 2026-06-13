@@ -84,6 +84,7 @@ function StatusBadge({ status }: { status: SectionStatus }) {
 function SectionCard({
     section,
     saving,
+    isGenerating,
     onSave,
     onRegenerate,
     onViewAttribution,
@@ -91,6 +92,7 @@ function SectionCard({
 }: {
     section: BRDSectionView;
     saving: boolean;
+    isGenerating?: boolean;
     onSave: (section: BRDSectionView, content: string) => Promise<void>;
     onRegenerate: () => void;
     onViewAttribution: (section: BRDSectionView) => void;
@@ -134,10 +136,11 @@ function SectionCard({
                     </button>
                     <button
                         onClick={onRegenerate}
-                        className="p-1.5 rounded-lg text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-                        title="Regenerate all sections"
+                        disabled={isGenerating}
+                        className="p-1.5 rounded-lg text-zinc-600 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
+                        title="Regenerate section"
                     >
-                        <RefreshCw size={13} />
+                        {isGenerating ? <Loader2 size={13} className="animate-spin text-cyan-400" /> : <RefreshCw size={13} />}
                     </button>
                 </div>
             </div>
@@ -179,11 +182,18 @@ function SectionCard({
                 </div>
             )}
 
-            {!editing && section.content && (
+            {!editing && section.content && !isGenerating && (
                 <div className="px-5 py-4">
                     <div className="prose prose-invert prose-sm max-w-none text-zinc-300 text-xs leading-relaxed whitespace-pre-line">
                         {section.content}
                     </div>
+                </div>
+            )}
+
+            {isGenerating && (
+                <div className="px-5 py-8 flex flex-col items-center justify-center gap-3 bg-white/2">
+                    <Loader2 size={24} className="animate-spin text-cyan-400" />
+                    <p className="text-xs text-cyan-300 font-medium">Regenerating section...</p>
                 </div>
             )}
 
@@ -280,7 +290,7 @@ export default function BRDPage() {
     const { activeSessionId, sessions } = useSessionStore();
     const { user } = useAuth();
     const sessionId = activeSessionId ?? "";
-    const { sections, flags: apiFlags, loading, generating, error, generateAll, loadBRD, updateSection, acknowledgedFlagKeys, acknowledgeFlag, approveAll } = useBRDStore();
+    const { sections, flags: apiFlags, loading, generating, generatingSection, error, generateAll, generateSection, loadBRD, updateSection, acknowledgedFlagKeys, acknowledgeFlag, approveAll } = useBRDStore();
 
     const [flagsExpanded, setFlagsExpanded] = useState(false);
     const [flags, setFlags] = useState<ValidationFlagView[]>([]);
@@ -559,8 +569,9 @@ export default function BRDPage() {
                             <SectionCard
                                 section={section}
                                 saving={loading}
+                                isGenerating={generatingSection === section.id}
                                 onSave={async (s, nextContent) => updateSection(sessionId, s.id, nextContent)}
-                                onRegenerate={() => generateAll(sessionId)}
+                                onRegenerate={() => generateSection(sessionId, section.id)}
                                 onViewAttribution={(s) => setAttrDrawer(s)}
                                 onViewHistory={(s) => setHistDrawer(s)}
                             />

@@ -13,7 +13,7 @@ import os
 import json
 import uuid
 import re
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
