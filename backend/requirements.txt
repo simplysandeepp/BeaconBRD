@@ -3,7 +3,7 @@ fastapi>=0.100.0
 uvicorn>=0.22.0
 
 # LLM and AI
-groq>=0.4.0
+openai>=1.50.0  # Used with OpenRouter base_url for LLM calls
 google-cloud-vision>=3.4.0
 google-cloud-firestore>=2.11.0
 google-api-python-client>=2.95.0
@@ -23,7 +23,8 @@ cryptography>=44.0.0
 # Document Generation
 python-docx>=0.8.11
 markdown>=3.6
-weasyprint>=60.0  # For PDF generation from HTML/Markdown
+# weasyprint removed — requires libcairo2-dev not available in slim Docker image
+# PDF export uses xhtml2pdf fallback instead
 python-multipart
 
 # Database
